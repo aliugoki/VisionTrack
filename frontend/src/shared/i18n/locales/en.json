@@ -1,0 +1,719 @@
+{
+  "app": {
+    "name": "VisionTrack",
+    "tagline": "Operations Command"
+  },
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "back": "Back",
+    "delete": "Delete",
+    "create": "Create",
+    "edit": "Edit",
+    "search": "Search",
+    "submit": "Submit",
+    "dismiss": "Dismiss",
+    "language": "Language",
+    "english": "English",
+    "arabic": "العربية",
+    "comingSoon": "Coming soon",
+    "module": "Module",
+    "close": "Close",
+    "remove": "Remove",
+    "refresh": "Refresh",
+    "view": "View",
+    "previous": "Previous",
+    "next": "Next"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "email": "Email",
+    "password": "Password",
+    "tenantSubdomain": "Workspace (optional)",
+    "tenantSubdomainHelp": "Only needed if your email is used across multiple workspaces",
+    "signingIn": "Signing in...",
+    "welcomeBack": "Welcome back",
+    "signInPrompt": "Sign in to your VisionTrack workspace",
+    "invalidCredentials": "Invalid email or password",
+    "loginSuccess": "Signed in successfully"
+  },
+  "nav": {
+    "overview": "Overview",
+    "liveWall": "Live wall",
+    "floorPlan": "Floor plan",
+    "cameras": "Cameras",
+    "zones": "Zones",
+    "employees": "Employees",
+    "alerts": "Alerts",
+    "recordings": "Recordings",
+    "analytics": "Analytics",
+    "users": "Users",
+    "roles": "Roles & permissions",
+    "settings": "Settings",
+    "monitoring": "Monitoring",
+    "configuration": "Configuration",
+    "administration": "Administration",
+    "persons": "Persons",
+    "bev": "Bird's-Eye View",
+    "calibration": "Calibration"
+  },
+  "dashboard": {
+    "title": "Operations overview",
+    "subtitle": "Real-time status across all sites and cameras",
+    "stats": {
+      "camerasOnline": "Cameras online",
+      "activeTracks": "Active tracks",
+      "openAlerts": "Open alerts",
+      "eventsToday": "Events today"
+    }
+  },
+  "cameras": {
+    "subtitle": "Manage RTSP camera sources and live streams",
+    "addButton": "Add camera",
+    "addTitle": "Add camera",
+    "addSubtitle": "Connect a new RTSP camera source",
+    "editTitle": "Edit camera",
+    "editSubtitle": "Update camera configuration",
+    "searchPlaceholder": "Search cameras by name...",
+    "preview": "Preview live",
+    "deleteTitle": "Delete camera",
+    "deleteConfirm": "Delete camera \"{{name}}\"? Recordings will be retained but the live stream will stop immediately.",
+    "emptyTitle": "No cameras yet",
+    "emptyHint": "Add your first camera to start monitoring. You can enter an RTSP URL manually, or scan your network for ONVIF-compliant cameras.",
+    "status": {
+      "online": "Online",
+      "offline": "Offline",
+      "error": "Error",
+      "pending": "Connecting",
+      "disabled": "Disabled"
+    },
+    "fields": {
+      "name": "Name",
+      "site": "Site",
+      "sitePlaceholder": "Select a site",
+      "rtspUrl": "RTSP URL",
+      "rtspUrlHint": "Include credentials if your camera requires them",
+      "rtspUrlPlaceholderEdit": "Leave blank to keep the current URL",
+      "rtspUrlHintEdit": "Only enter a new URL if you want to change the source",
+      "description": "Description",
+      "isRecording": "Record continuously"
+    },
+    "row": {
+      "onFloorPlan": "On floor plan \"{{name}}\"",
+      "onNFloorPlans": "On {{count}} floor plans",
+      "pickPlan": "Open on plan"
+    },
+    "discover": {
+      "title": "Auto-discover ONVIF cameras",
+      "hint": "Scans your local network for ONVIF-compliant cameras. Optional credentials let us retrieve each camera's RTSP URL automatically.",
+      "username": "ONVIF username",
+      "password": "ONVIF password",
+      "scan": "Scan network",
+      "scanning": "Scanning...",
+      "empty": "No cameras found. Discovery requires the backend to be on the same network as the cameras.",
+      "failed": "Discovery failed",
+      "needsCreds": "Needs credentials"
+    },
+    "toast": {
+      "created": "Camera added",
+      "updated": "Camera updated",
+      "updatedReconnecting": "Camera updated — stream reconnecting, ready in ~15 seconds",
+      "deleted": "Camera deleted",
+      "deleteFailed": "Couldn't delete camera"
+    },
+    "activity": {
+      "liveCount": "{{count}} live",
+      "idle": "idle",
+      "viewPersons": "View persons",
+      "identified": "Identified",
+      "unidentified": "Unidentified"
+    }
+  },
+  "tracks": {
+    "overlay": {
+      "toggleOverlay": "Show / hide detection overlay",
+      "toggleLabels": "Show / hide track ID and confidence labels",
+      "toggleTrails": "Show / hide movement trails"
+    }
+  },
+  "liveWall": {
+    "subtitle": "Monitor multiple cameras simultaneously. Save layouts as presets for different shifts or workflows.",
+    "layout": "Layout",
+    "editMode": "Edit layout",
+    "viewMode": "Done editing",
+    "saveChanges": "Save changes",
+    "noPermission": "You don't have permission to view live camera feeds.",
+    "tile": {
+      "addCamera": "Add camera",
+      "empty": "No camera",
+      "clear": "Remove from this tile",
+      "searchCamera": "Search cameras...",
+      "noCameras": "No cameras match your search",
+      "missingCamera": "Camera no longer exists",
+      "dragHint": "Drag to swap with another tile",
+      "fullscreen": "Maximize tile",
+      "exitFullscreen": "Return to grid",
+      "showOnFloorPlan": "Show on floor plan"
+    },
+    "nvenc": {
+      "warnTitle": "GPU encoder capacity is nearly full",
+      "warnBody": "This wall uses {{count}} of {{limit}} H.265 encoder sessions. Adding one more H.265 camera will exceed the consumer GPU limit.",
+      "exceededTitle": "GPU encoder capacity exceeded",
+      "exceededBody": "This wall uses {{count}} H.265 cameras but the consumer GPU caps at {{limit}} concurrent encoder sessions. Extra cameras will fail to transcode for browser playback. Reduce H.265 cameras or upgrade to a data-center GPU."
+    },
+    "presets": {
+      "empty": "No saved presets yet. Configure a layout and save it.",
+      "saveAs": "Save as preset",
+      "saveTitle": "Save layout as preset",
+      "saveSubtitle": "Presets are shared across everyone in your workspace.",
+      "name": "Preset name",
+      "description": "Description (optional)",
+      "makeDefault": "Load this preset by default when opening the Live Wall",
+      "nameRequired": "Name is required",
+      "saved": "Preset saved",
+      "saveFailed": "Couldn't save preset",
+      "deleted": "Preset deleted",
+      "deleteFailed": "Couldn't delete preset",
+      "deleteTitle": "Delete preset",
+      "deleteConfirm": "Delete preset \"{{name}}\"? This affects everyone in your workspace."
+    }
+  },
+  "floorPlan": {
+    "subtitle": "Building blueprints with camera placements. Upload a floor plan, then map cameras to physical locations on it.",
+    "empty": "No floor plans yet. Upload your first one to get started.",
+    "noPermission": "You don't have permission to view floor plans.",
+    "upload": {
+      "title": "Upload a floor plan",
+      "subtitle": "PNG, JPG, SVG, or PDF up to {{limitMB}} MB.",
+      "submit": "Upload floor plan",
+      "site": "Site",
+      "name": "Plan name",
+      "namePlaceholder": "e.g. Ground Floor — Warehouse A",
+      "description": "Description (optional)",
+      "file": "File",
+      "filePlaceholder": "Choose a file...",
+      "fileHint": "Supported: PNG, JPG, SVG, PDF. Max {{limitMB}} MB.",
+      "siteRequired": "Pick a site",
+      "nameRequired": "Name is required",
+      "fileRequired": "Pick a file to upload",
+      "tooLarge": "File exceeds the {{limitMB}} MB limit",
+      "success": "Floor plan uploaded",
+      "failed": "Upload failed"
+    },
+    "card": {
+      "preview": "Preview",
+      "editPlacement": "Edit placement",
+      "markerCount_one": "{{count}} marker",
+      "markerCount_other": "{{count}} markers"
+    },
+    "editor": {
+      "noPermission": "You don't have permission to edit floor plans.",
+      "unsaved": "Unsaved changes",
+      "saved": "Placements saved",
+      "saveFailed": "Couldn't save placements",
+      "discardConfirm": "You have unsaved changes. Discard them?",
+      "placingMode": "Placing {{name}}",
+      "placingHint": "Click on the plan to drop the marker.",
+      "unplaced_one": "Cameras ({{count}})",
+      "unplaced_other": "Cameras ({{count}})",
+      "unplacedEmpty": "All cameras are placed.",
+      "noCameras": "No cameras in this workspace yet. Add cameras first, then return to map them.",
+      "placed_one": "Placed ({{count}})",
+      "placed_other": "Placed ({{count}})",
+      "placedEmpty": "No cameras placed yet. Pick one from the list above.",
+      "goToCamera": "Open camera page",
+      "tabs": {
+        "cameras": "Cameras",
+        "zones": "Zones"
+      },
+      "cone": {
+        "title": "Coverage cone",
+        "show": "Show cone",
+        "disabledHint": "Show this camera's field of view on the plan.",
+        "angle": "Angle (FOV)",
+        "range": "Range",
+        "rotation": "Direction",
+        "dirRight": "Right",
+        "dirDown": "Down",
+        "dirLeft": "Left",
+        "dirUp": "Up",
+        "reset": "Reset to defaults"
+      }
+    },
+    "zones": {
+      "newZone": "New zone",
+      "finish": "Finish",
+      "defaultName": "Zone {{n}}",
+      "deleteZone": "Delete zone",
+      "editing": "Editing zone",
+      "empty": "No zones drawn yet. Click \"New zone\" to start.",
+      "listHeading_one": "Zones ({{count}})",
+      "listHeading_other": "Zones ({{count}})",
+      "drawing": {
+        "title": "Drawing zone...",
+        "needMore_one": "Click {{count}} more time to enable Finish.",
+        "needMore_other": "Click {{count}} more times to enable Finish.",
+        "ready": "Double-click or press Finish to close the polygon.",
+        "hint": "ESC to cancel.",
+        "cancel": "Cancel drawing"
+      },
+      "fields": {
+        "name": "Name",
+        "color": "Color"
+      },
+      "rules": {
+        "heading": "Alert rules",
+        "add": "Add rule",
+        "empty": "No rules yet. Click \"Add rule\" to set one up.",
+        "deleteConfirm": "Delete this rule?",
+        "disabled": "Disabled",
+        "summary": {
+          "occupancy_max": "Max {{n}} people, sustained {{s}}s",
+          "occupancy_min": "Min {{n}} people, sustained {{s}}s",
+          "entry": "Entry when ≥ {{n}} present",
+          "dwell": "Dwell ≥ {{s}}s (Step 8)"
+        }
+      },
+      "ruleEditor": {
+        "titleNew": "Add alert rule",
+        "titleEdit": "Edit alert rule",
+        "add": "Add rule",
+        "apply": "Apply",
+        "kind": "Rule type",
+        "kinds": {
+          "occupancy_max": "Max occupancy",
+          "occupancy_min": "Min occupancy",
+          "entry": "Entry",
+          "dwell": "Dwell time"
+        },
+        "kindHints": {
+          "occupancy_max": "Fire when too many people are in the zone",
+          "occupancy_min": "Fire when the zone is unattended",
+          "entry": "Fire when someone enters the zone",
+          "dwell": "Fire when a person stays too long (available after Step 8)"
+        },
+        "threshold": "Threshold",
+        "thresholdHints": {
+          "max": "Alert when count exceeds this number",
+          "min": "Alert when count falls below this number",
+          "entry": "Minimum people to count as an entry (usually 1)",
+          "dwell": "Minimum people present to start dwell tracking"
+        },
+        "holdTime": "Hold time (seconds)",
+        "holdHints": {
+          "occupancy": "Condition must hold this long before firing",
+          "entry": "Entry rules fire immediately on the transition"
+        },
+        "label": "Label",
+        "labelPlaceholder": "e.g. \"After-hours intrusion\"",
+        "severity": "Severity",
+        "severities": {
+          "info": "Info",
+          "warning": "Warning",
+          "critical": "Critical"
+        },
+        "channels": "Channels",
+        "channelLabels": {
+          "in_app": "In-app",
+          "email": "Email",
+          "whatsapp": "WhatsApp"
+        },
+        "channelHints": {
+          "in_app": "Show in the alerts feed (always recommended)",
+          "email": "Send email to tenant admins (coming in next batch)",
+          "whatsapp": "Send WhatsApp message (coming in next batch)"
+        },
+        "schedule": "When active",
+        "scheduleModes": {
+          "always": "Always",
+          "scheduled": "On schedule"
+        },
+        "startTime": "Start time",
+        "endTime": "End time",
+        "crossMidnightHint": "End time before start time = crosses midnight (e.g. 22:00–06:00)",
+        "days": {
+          "label": "Days",
+          "mon": "Mon",
+          "tue": "Tue",
+          "wed": "Wed",
+          "thu": "Thu",
+          "fri": "Fri",
+          "sat": "Sat",
+          "sun": "Sun"
+        },
+        "enabled": "Status",
+        "enabledOn": "Enabled — rule is active",
+        "enabledOff": "Disabled — rule is paused",
+        "errors": {
+          "threshold": "Threshold must be a non-negative number",
+          "holdTime": "Hold time must be a non-negative whole number of seconds",
+          "labelTooLong": "Label is too long (max 120 characters)",
+          "timePair": "Both start and end time are required, or neither",
+          "scheduleEmpty": "Pick at least one day or set a time window",
+          "noChannel": "Pick at least one channel"
+        }
+      }
+    },
+    "livePreview": {
+      "cameraMissing": "Camera not found — it may have been removed.",
+      "noStream": "Stream unavailable",
+      "expand": "Open full view",
+      "openCamera": "Open camera page"
+    },
+    "edit": {
+      "title": "Edit floor plan"
+    },
+    "editToast": {
+      "updated": "Floor plan updated",
+      "failed": "Couldn't update floor plan"
+    },
+    "delete": {
+      "title": "Delete floor plan",
+      "confirm": "Delete floor plan \"{{name}}\"? This permanently removes the file and any camera placements on it."
+    },
+    "deleteToast": {
+      "success": "Floor plan deleted",
+      "failed": "Couldn't delete floor plan"
+    },
+    "viewer": {
+      "loadFailed": "Couldn't load floor plan image",
+      "notFound": "Floor plan image not available",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out",
+      "fit": "Reset zoom"
+    }
+  },
+  "recordings": {
+    "title": "Recordings",
+    "subtitle": "Review past video segments from your cameras",
+    "counter": "Showing {{shown}} of {{total}}",
+    "filters": {
+      "allCameras": "All cameras"
+    },
+    "empty": {
+      "title": "No recordings for this day",
+      "body": "Try a different date, or check that recording is enabled."
+    },
+    "playback": {
+      "error": "Could not play this recording.",
+      "unsupported": "Your browser doesn't support HLS playback."
+    },
+    "stats": {
+      "totalSegments": "Total segments",
+      "totalSize": "Storage used",
+      "retention": "Retention policy",
+      "retentionValue": "{{days}} days"
+    }
+  },
+  "alerts": {
+    "clip": {
+      "view": "View clip",
+      "unavailable": "No recording available for this alert",
+      "error": "Could not load the clip"
+    },
+    "title": "Alerts",
+    "subtitle": "Real-time zone violations and rule firings",
+    "empty": {
+      "title": "No alerts to show",
+      "body": "Active rules will appear here as they fire."
+    },
+    "filters": {
+      "severities": {
+        "all": "All severities",
+        "info": "Info",
+        "warning": "Warning",
+        "critical": "Critical"
+      },
+      "statuses": {
+        "all": "All statuses",
+        "active": "Active",
+        "acknowledged": "Acknowledged",
+        "resolved": "Resolved"
+      }
+    },
+    "actions": {
+      "acknowledge": "Acknowledge",
+      "resolve": "Resolve"
+    },
+    "audit": {
+      "acknowledgedAt": "Acknowledged {{when}}",
+      "resolvedAt": "Resolved {{when}}"
+    },
+    "summary": {
+      "entry": "Entry",
+      "exit": "Exit",
+      "loiter": "Loiter > {{s}}s",
+      "dwell": "Dwell > {{s}}s",
+      "occupancy_max": "Occupancy > {{n}}",
+      "occupancy_min": "Occupancy < {{n}}",
+      "speed": "Speed > {{v}}",
+      "intrusion": "Intrusion"
+    },
+    "toast": {
+      "fired": "{{rule}} fired in {{zone}}",
+      "acknowledged": "Alert acknowledged",
+      "resolved": "Alert resolved",
+      "ackFailed": "Could not acknowledge",
+      "resolveFailed": "Could not resolve"
+    },
+    "banner": {
+      "active": "{{count}} active alert",
+      "active_plural": "{{count}} active alerts",
+      "view": "View"
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Configure your organization and access",
+    "sections": {
+      "organization": {
+        "title": "Organization",
+        "body": "Name, timezone, and retention policy"
+      },
+      "users": {
+        "title": "Users",
+        "body": "Add, edit, and deactivate team members"
+      },
+      "roles": {
+        "title": "Roles & Permissions",
+        "body": "Define what each role can do"
+      },
+      "storage": {
+        "title": "Storage & Recordings",
+        "body": "Manage recordings and retention"
+      }
+    },
+    "tenant": {
+      "subtitle": "Organization-wide settings",
+      "name": "Organization name",
+      "nameHelp": "Displayed in the header and emails",
+      "subdomain": "Subdomain",
+      "subdomainHelp": "Cannot be changed. Contact support to migrate.",
+      "timezone": "Timezone",
+      "timezoneHelp": "Used for reports and the nightly retention sweep",
+      "retention": "Recording retention",
+      "retentionHelp": "Older recordings are deleted automatically",
+      "days": "days",
+      "plan": "Plan",
+      "status": "Status",
+      "active": "Active",
+      "inactive": "Inactive",
+      "save": "Save changes",
+      "saveSuccess": "Settings saved",
+      "saveError": "Could not save settings"
+    },
+    "deepstream": {
+      "label": "Use DeepStream pipeline",
+      "description": "Enable NVIDIA DeepStream + cross-camera ReID. Requires the ai-worker-ds container to be running. Toggle off to fall back to the standard pipeline."
+    }
+  },
+  "users": {
+    "title": "Users",
+    "subtitle": "Team members with access to this workspace",
+    "searchPlaceholder": "Search by name, email, or role",
+    "counter": "{{shown}} of {{total}}",
+    "superuser": "Super",
+    "col": {
+      "name": "Name",
+      "email": "Email",
+      "roles": "Roles",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "actions": {
+      "add": "Add user",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "empty": {
+      "title": "No users yet",
+      "searchTitle": "No matching users"
+    },
+    "form": {
+      "createTitle": "Add user",
+      "editTitle": "Edit user",
+      "name": "Full name",
+      "nameRequired": "Name is required",
+      "email": "Email",
+      "emailRequired": "Email is required",
+      "password": "Password",
+      "passwordHelp": "Minimum 8 characters",
+      "passwordTooShort": "Password must be at least 8 characters",
+      "locale": "Preferred language",
+      "active": "Active",
+      "roles": "Roles",
+      "noRoles": "No roles defined yet. Create roles first.",
+      "systemRole": "system",
+      "createSuccess": "User created",
+      "createError": "Could not create user",
+      "editSuccess": "User updated",
+      "editError": "Could not update user"
+    },
+    "delete": {
+      "title": "Delete user",
+      "confirm": "Delete {{name}}?",
+      "warning": "This cannot be undone.",
+      "success": "User deleted",
+      "error": "Could not delete user"
+    }
+  },
+  "roles": {
+    "title": "Roles & Permissions",
+    "subtitle": "Define what each role can do",
+    "searchPlaceholder": "Search by name or description",
+    "counter": "{{shown}} of {{total}}",
+    "permissionsCount": "{{n}} permissions",
+    "col": {
+      "name": "Name",
+      "description": "Description",
+      "permissions": "Permissions",
+      "type": "Type",
+      "actions": "Actions"
+    },
+    "type": {
+      "system": "System",
+      "custom": "Custom"
+    },
+    "actions": {
+      "add": "Add role",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "empty": {
+      "title": "No roles defined yet",
+      "searchTitle": "No matching roles"
+    },
+    "form": {
+      "createTitle": "Create role",
+      "editTitle": "Edit role",
+      "name": "Name",
+      "description": "Description",
+      "permissions": "Permissions",
+      "nameRequired": "Name is required",
+      "permissionsRequired": "Select at least one permission",
+      "systemNameReadonly": "System roles cannot be renamed, but their permissions can be edited.",
+      "createSuccess": "Role created",
+      "createError": "Could not create role",
+      "editSuccess": "Role updated",
+      "editError": "Could not update role"
+    },
+    "delete": {
+      "title": "Delete role",
+      "confirm": "Delete {{name}}?",
+      "warning": "Users assigned this role will lose its permissions. This cannot be undone.",
+      "success": "Role deleted",
+      "error": "Could not delete role"
+    },
+    "matrix": {
+      "selectAll": "Select all permissions",
+      "expandAll": "Expand all",
+      "collapseAll": "Collapse all"
+    }
+  },
+  "analytics": {
+    "title": "Analytics",
+    "subtitle": "Trends and breakdowns across alerts, tracking, and storage",
+    "range": {
+      "last24h": "Last 24h",
+      "last7d": "Last 7 days",
+      "last30d": "Last 30 days"
+    },
+    "kpi": {
+      "alertsTotal": "Alerts (total)",
+      "alertsActive": "Active alerts",
+      "zonesWithAlerts": "Zones with alerts",
+      "personsTracked": "Persons tracked"
+    },
+    "charts": {
+      "alertsOverTime": "Alerts over time",
+      "peopleOverTime": "Persons tracked over time",
+      "totalAlerts": "{{n}} total",
+      "peakCount": "Peak: {{n}}",
+      "bySeverity": "By severity",
+      "byZone": "By zone",
+      "byRule": "By rule"
+    },
+    "empty": {
+      "noAlerts": "No alerts in this period",
+      "noPeople": "No tracking data in this period",
+      "noBreakdown": "No alerts to break down",
+      "noBreakdownSection": "No data"
+    },
+    "identities": {
+      "heading": "Cross-camera identities",
+      "total": "Total identities",
+      "activeLast24h": "Active (last 24h)",
+      "newToday": "New today",
+      "avgAppearances": "Avg. appearances"
+    }
+  },
+  "persons": {
+    "title": "Persons",
+    "subtitle": "Cross-camera identities detected across your sites",
+    "searchPlaceholder": "Search by person ID",
+    "columns": {
+      "id": "Person ID",
+      "firstSeen": "First seen",
+      "lastSeen": "Last seen",
+      "appearances": "Appearances"
+    },
+    "pagination": {
+      "showing": "Showing {{start}}–{{end}} ({{count}} on page)"
+    },
+    "empty": {
+      "title": "No persons yet",
+      "description": "Persons appear here automatically once the AI worker pipeline begins producing embeddings and the matcher identifies cross-camera identities."
+    },
+    "detail": {
+      "notFound": "Person not found",
+      "notFoundHint": "This identity may have been removed or never existed.",
+      "backToList": "Back to persons",
+      "identityHeading": "Identity",
+      "appearanceBadge": "{{count}} appearances",
+      "stats": {
+        "firstSeen": "First seen",
+        "lastSeen": "Last seen",
+        "observed": "Observed window",
+        "hoursValue": "{{hours}} h",
+        "uniqueCameras": "Cameras"
+      },
+      "timelineHeading": "Cross-camera timeline",
+      "timelineSubtitle": "{{count}} sightings",
+      "timelineEmpty": "No sightings recorded for this person yet.",
+      "unknownCamera": "Unknown camera",
+      "activeBadge": "Active",
+      "durationLabel": "{{seconds}}s",
+      "pointsLabel": "{{count}} points"
+    }
+  },
+  "bev": {
+    "title": "Bird's-Eye View",
+    "subtitle": "Live top-down tracking projected onto your floor plan",
+    "calibrationTitle": "Camera Calibration",
+    "calibrationSubtitle": "Map a camera's view onto a floor plan for Bird's-Eye tracking",
+    "camera": "Camera",
+    "floorPlan": "Floor plan",
+    "selectCamera": "Select a camera",
+    "selectFloorPlan": "Select a floor plan",
+    "cameraView": "Camera view",
+    "floorPlanView": "Floor plan",
+    "calibrationHint": "Click 4 matching points in the same order — {{srcCount}}/4 on the camera, {{dstCount}}/4 on the floor plan.",
+    "saveCalibration": "Save calibration",
+    "reset": "Reset",
+    "calibrationSaved": "Calibration saved",
+    "calibrationFailed": "Failed to save calibration",
+    "degeneratePoints": "Invalid points — they may be collinear. Pick 4 spread-out points.",
+    "noCalibratePermission": "You don't have permission to calibrate cameras.",
+    "noReadPermission": "You don't have permission to view tracking.",
+    "live": "Live",
+    "offline": "Offline",
+    "peopleLive": "{{count}} live",
+    "noCalibratedCameras": "No cameras are calibrated for this floor plan yet."
+  }
+}

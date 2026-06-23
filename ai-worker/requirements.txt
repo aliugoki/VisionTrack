@@ -1,0 +1,42 @@
+# PyTorch with CUDA 12.4 support
+# https://pytorch.org/get-started/locally/
+# torch 2.5.1 + cu124 is the stable combo that pairs cleanly with
+# CUDA 12.4 runtime and supports our RTX 3070 (Ampere, sm_86).
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.5.1
+torchvision==0.20.1
+
+# YOLOv8 (Ultralytics). Pin to 8.4.14 — first stable line post the
+# December 2024 8.3.41 supply-chain compromise. Don't downgrade to 8.3.x.
+ultralytics==8.4.14
+
+# ByteTrack tracker, courtesy of Roboflow's supervision library.
+# We use this rather than the original ByteTrack repo because supervision
+# bundles it cleanly with a Pythonic API and no Cython compilation.
+supervision==0.24.0
+
+# OpenCV — RTSP frame reading. headless variant to avoid pulling GUI libs.
+opencv-python-headless==4.10.0.84
+
+# numpy is a transitive dep of torch+opencv. Pin to a version both accept.
+numpy==1.26.4
+
+# HTTP client for the backend's REST API (camera discovery, auth).
+httpx==0.27.2
+
+# Redis client with async support for publishing track events.
+redis==5.1.1
+
+# Settings management — same pattern as the backend.
+pydantic==2.9.2
+pydantic-settings==2.6.0
+
+# structlog for consistent JSON-like logs across the system.
+structlog==24.4.0
+
+# onnxruntime (CPU) — runs the OSNet ReID model (osnet_v2.onnx) for embedding
+# extraction. CPU build is intentional: at 1-in-N frame sampling on small
+# crops the load is trivial, and it avoids CUDA/cuDNN/ABI matching against
+# torch's GPU context. Swap to onnxruntime-gpu + CUDAExecutionProvider later
+# if embedding throughput ever needs the GPU.
+onnxruntime==1.19.2

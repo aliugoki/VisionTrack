@@ -1,0 +1,38 @@
+# OSNet v2 ReID — secondary inference via Triton (P2.3b nvinferserver swap)
+#
+# Engine was built with: FullDims, dynamic batch 1-16, fp16, opset 17
+# Input  "input"     : 1x3x256x128 dynamic batch
+# Output "embedding" : 512 dim
+#
+# Using tensorrt_plan platform so Triton just loads the pre-built engine
+# rather than re-compiling at startup. The engine is the SAME osnet_v2.engine
+# we used (and verified) with nvinfer.
+
+name: "osnet_reid"
+platform: "tensorrt_plan"
+max_batch_size: 16
+
+input [
+  {
+    name: "input"
+    data_type: TYPE_FP32
+    format: FORMAT_NCHW
+    dims: [ 3, 256, 128 ]
+  }
+]
+
+output [
+  {
+    name: "embedding"
+    data_type: TYPE_FP32
+    dims: [ 512 ]
+  }
+]
+
+instance_group [
+  {
+    kind: KIND_GPU
+    count: 1
+    gpus: 0
+  }
+]

@@ -1,0 +1,363 @@
+# =============================================================================
+# VisionTrack — Local development orchestration
+#
+#   docker compose up        Start everything (foreground)
+#   docker compose up -d     Start everything (background)
+#   docker compose logs -f   Tail logs
+#   docker compose down      Stop everything
+#   docker compose down -v   Stop and wipe all volumes (DESTRUCTIVE)
+#
+# Once running:
+#   Frontend:  http://localhost:5173
+#   Backend:   http://localhost:8000     (Swagger: /docs)
+#   MinIO UI:  http://localhost:9001     (visiontrack / visiontrack_dev_password)
+#   MediaMTX:  rtsp://localhost:8554     (HLS: http://localhost:8888)
+#
+# First-login credentials (seeded automatically on first run):
+#   Email:    admin@visiontrack.io
+#   Password: ChangeMe123!
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL with TimescaleDB extension
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: timescale/timescaledb:2.17.0-pg16
+    container_name: vt-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-visiontrack}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-visiontrack_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-visiontrack}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-visiontrack}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Redis — Celery broker, Socket.IO pub/sub, AI worker event stream
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7.4-alpine
+    container_name: vt-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # MinIO — S3-compatible object storage for recordings + snapshots
+  # ---------------------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2024-10-13T13-34-11Z
+    container_name: vt-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-visiontrack}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-visiontrack_dev_password}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web console
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # One-shot job that creates the bucket on first boot
+  minio-init:
+    image: minio/mc:RELEASE.2024-10-08T09-37-26Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:-visiontrack} ${MINIO_SECRET_KEY:-visiontrack_dev_password};
+        mc mb --ignore-existing local/visiontrack;
+        echo 'MinIO bucket ready';
+      "
+
+  # ---------------------------------------------------------------------------
+  # MediaMTX — RTSP ingest + HLS republishing + recording + GPU transcoding
+  # Custom build adds CUDA-accelerated FFmpeg for H.265 -> H.264 transcoding
+  # ---------------------------------------------------------------------------
+  mediamtx:
+    build:
+      context: ./docker
+      dockerfile: mediamtx.Dockerfile
+    container_name: vt-mediamtx
+    restart: unless-stopped
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: video,compute,utility
+    volumes:
+      - ./docker/mediamtx.yml:/mediamtx.yml:ro
+      - mediamtx_recordings:/recordings
+    ports:
+      - "8554:8554"   # RTSP
+      - "8888:8888"   # HLS
+      - "8889:8889"   # WebRTC
+      - "9997:9997"   # Control API
+
+  # ---------------------------------------------------------------------------
+  # FastAPI backend
+  # ---------------------------------------------------------------------------
+  backend:
+    build: ./backend
+    container_name: vt-backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      MINIO_ENDPOINT: minio:9000
+      MEDIAMTX_API_URL: http://mediamtx:9997
+    volumes:
+      - mediamtx_recordings:/recordings:ro
+      - ./backend:/app
+      # Backend writes the ai-worker service token here at startup;
+      # ai-worker reads it from the same named volume.
+      - ai_worker_secrets:/run/secrets
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "
+        echo 'Waiting for postgres...';
+        until pg_isready -h postgres -U $${POSTGRES_USER:-visiontrack}; do sleep 1; done;
+        echo 'Running migrations...';
+        alembic upgrade head;
+        echo 'Starting API server...';
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      "
+
+  # ---------------------------------------------------------------------------
+  # Celery worker — runs background tasks queued from the API or fired by beat
+  # ---------------------------------------------------------------------------
+  worker:
+    build: ./backend
+    container_name: vt-worker
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      MEDIAMTX_API_URL: http://mediamtx:9997
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=2
+
+  # ---------------------------------------------------------------------------
+  # Celery beat — the scheduler. Fires the health check every 30s.
+  # ---------------------------------------------------------------------------
+  beat:
+    build: ./backend
+    container_name: vt-beat
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+    volumes:
+      - ./backend:/app
+    depends_on:
+      worker:
+        condition: service_started
+    command: celery -A app.workers.celery_app beat --loglevel=info
+
+  # ---------------------------------------------------------------------------
+  # AI Worker — YOLOv8 person detection + ByteTrack tracking
+  # Reads RTSP from MediaMTX, publishes track events to Redis Streams.
+  # Requires NVIDIA Container Toolkit on the host.
+  # ---------------------------------------------------------------------------
+  ai-worker:
+    build: ./ai-worker
+    container_name: vt-ai-worker
+    restart: unless-stopped
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,video
+      BACKEND_URL: http://backend:8000
+      MEDIAMTX_RTSP_BASE: rtsp://mediamtx:8554
+      REDIS_URL: redis://redis:6379/0
+      # Token file is written by the backend's startup seeder
+      BACKEND_TOKEN_FILE: /run/secrets/ai_worker_token
+      LOG_LEVEL: INFO
+      # See ai-worker/app/config.py for the full list of tunables.
+      # CONFIDENCE_THRESHOLD: "0.35"
+      # TARGET_FPS: "10"
+      # MODEL_NAME: "yolov8n.pt"
+      # EMBEDDING_QUALITY_FLOOR: "0.3"   # default; lower toward 0 if subjects are small/distant
+    volumes:
+      # Read the service-account token written by the backend at startup
+      - ai_worker_secrets:/run/secrets:ro
+      # OSNet ReID model for embedding extraction (P2.5 producer). Mounted
+      # read-only from the host — same osnet_v2.onnx the DeepStream worker
+      # uses, not baked into the image (keeps iteration fast).
+      - ${HOME}/deepstream_visitor_reid/models:/models:ro
+
+  # ---------------------------------------------------------------------------
+  # ai-worker-ds — DeepStream + ReID variant (P2)
+  #
+  # PARALLEL-RUN with the existing ai-worker: this service writes to
+  # vt:ds:tracks:* Redis streams (note the ds: namespace) which the backend
+  # consumer reads when tenants.use_deepstream = true. The two workers do not
+  # interfere with each other and can run side-by-side during validation.
+  #
+  # UNCOMMENT after first build to start the service. Models are mounted from
+  # the host's deepstream_visitor_reid/models directory (not baked into the
+  # image — too large for fast iteration).
+  # ---------------------------------------------------------------------------
+  ai-worker-ds:
+    build:
+      context: ./ai-worker-ds
+      dockerfile: Dockerfile
+    image: visiontrack-ai-worker-ds:latest
+    container_name: vt-ai-worker-ds
+    restart: unless-stopped
+    runtime: nvidia
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility,video
+      BACKEND_URL: http://backend:8000
+      MEDIAMTX_RTSP_BASE: rtsp://mediamtx:8554
+      REDIS_URL: redis://redis:6379/0
+      BACKEND_TOKEN_FILE: /run/secrets/ai_worker_token
+      LOG_LEVEL: INFO
+      TRACK_STREAM_PREFIX: vt:ds:tracks
+      LIFECYCLE_STREAM_PREFIX: vt:ds:track_lifecycle
+    volumes:
+      - ai_worker_secrets:/run/secrets:ro
+      - ${HOME}/deepstream_visitor_reid/models:/models:ro
+    depends_on:
+      backend:
+        condition: service_started
+      mediamtx:
+        condition: service_started
+      redis:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Vite frontend
+  # ---------------------------------------------------------------------------
+  frontend:
+    build: ./frontend
+    container_name: vt-frontend
+    restart: unless-stopped
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+  # ---------------------------------------------------------------------------
+  # etcd — Milvus metadata store
+  # Using quay.io/coreos/etcd (bitnami's tag layout doesn't include 3.5 as a
+  # floating tag). Command-line flags set advertise/listen URLs; conflicting
+  # env vars are deliberately omitted (etcd fatals on overlap).
+  # ---------------------------------------------------------------------------
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.25
+    container_name: vt-etcd
+    command: >
+      etcd
+      -advertise-client-urls=http://etcd:2379
+      -listen-client-urls http://0.0.0.0:2379
+      --data-dir /etcd
+    restart: unless-stopped
+    environment:
+      ETCDCTL_API: "3"
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    volumes:
+      - etcd_data:/etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Milvus standalone — vector DB
+  #
+  # NOT clustered. For a 1-node demo this is sufficient. Migrating to
+  # milvus-cluster later requires changing this service to milvus-proxy +
+  # milvus-querynode + milvus-datanode etc.
+  # ---------------------------------------------------------------------------
+  milvus:
+    image: milvusdb/milvus:v2.4.13
+    container_name: vt-milvus
+    restart: unless-stopped
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      # Milvus uses S3-compatible storage. We point at our existing MinIO.
+      MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-visiontrack}
+      MINIO_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY:-visiontrack_dev_password}
+      MINIO_USE_SSL: "false"
+      # Use a dedicated bucket — Milvus auto-creates if missing.
+      MINIO_BUCKET_NAME: milvus-data
+      # Milvus needs IPv4-friendly defaults inside a container network.
+      COMMON_STORAGETYPE: minio
+    volumes:
+      - milvus_data:/var/lib/milvus
+    ports:
+      # gRPC API (the one pymilvus uses)
+      - "19530:19530"
+      # REST/Web admin (optional)
+      - "9091:9091"
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 20s
+      retries: 5
+
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  mediamtx_recordings:
+  ai_worker_secrets:
+  frontend_node_modules:
+  etcd_data:
+  milvus_data:

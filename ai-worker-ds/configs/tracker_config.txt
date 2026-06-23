@@ -1,0 +1,66 @@
+# NvDCF Tracker Configuration
+#
+# This file is loaded by nvtracker via its `ll-config-file` property.
+# Settings here are the NVIDIA "performance" preset (config_tracker_NvDCF_perf.yml),
+# tuned for high-throughput multi-camera scenarios on modest GPUs (RTX 3070).
+#
+# For higher-accuracy / slower scenarios, see config_tracker_NvDCF_accuracy.yml
+# in /opt/nvidia/deepstream/deepstream/samples/configs/deepstream-app/ inside
+# the container.
+#
+# Key tunables for our use case:
+#   - minTrackerConfidence: lower to keep flickering tracks alive longer
+#   - maxShadowTrackingAge: how many frames to keep a "lost" track before drop
+#   - bbox-config-file / cmdl-config-file: not used in basic single-stream mode
+
+BaseConfig:
+  minDetectorConfidence: 0.0   # 0 = let nvtracker accept all detections from pgie
+
+TargetManagement:
+  enableBboxUnClipping: 1
+  maxTargetsPerStream: 150
+
+  # Track lifecycle
+  minIouDiff4NewTarget: 0.5      # IoU below this -> consider it a new target
+  minTrackerConfidence: 0.2      # Drop tracks below this confidence
+  probationAge: 3                 # Frames a new track is "tentative"
+  maxShadowTrackingAge: 30        # Frames to keep a lost track around (3s @ 10fps)
+  earlyTerminationAge: 1
+
+TrajectoryManagement:
+  useUniqueID: 0    # 0 = per-stream IDs (our case until ReID lands in P2.5)
+
+DataAssociator:
+  dataAssociatorType: 0           # 0 = HungarianAlgorithm (default for NvDCF)
+  associationMatcherType: 1       # 1 = optimized matcher
+  checkClassMatch: 1              # Only associate detections of the same class
+
+  # Cost terms — sum forms the assignment cost
+  minMatchingScore4Overall: 0.0
+  minMatchingScore4SizeSimilarity: 0.6
+  minMatchingScore4Iou: 0.0
+  minMatchingScore4VisualSimilarity: 0.7
+
+  matchingScoreWeight4VisualSimilarity: 0.6
+  matchingScoreWeight4SizeSimilarity: 0.0
+  matchingScoreWeight4Iou: 0.4
+
+StateEstimator:
+  stateEstimatorType: 1           # 1 = simple Kalman, fast
+  processNoiseVar4Loc: 2.0
+  processNoiseVar4Size: 1.0
+  processNoiseVar4Vel: 0.1
+  measurementNoiseVar4Detector: 4.0
+  measurementNoiseVar4Tracker: 16.0
+
+VisualTracker:
+  visualTrackerType: 1            # 1 = NvDCF tracker
+  useColorNames: 1
+  useHog: 0                       # HoG off — too slow, NvDCF defaults are fine
+  featureImgSizeLevel: 2
+  SearchRegionPaddingScale: 1
+  maxTrackerCapacity: 30
+  numTopProcessedTrackers: 30
+  filterChannelWeightsLr: 0.04
+  filterLr: 0.075
+  gaussianSigma: 0.75

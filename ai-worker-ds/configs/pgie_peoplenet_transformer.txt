@@ -1,0 +1,43 @@
+# YOLOv8 person detector — single-class, prebuilt engine
+#
+# Replaces the PeopleNet config because:
+#   - peoplenet.engine is DETR-style (pred_logits/pred_boxes), needs custom parser
+#   - resnet34_peoplenet_int8.etlt is UFF format, deprecated in DS 7.1
+#   - yolov8_person.engine is plain YOLOv8 (output0: 1x5x8400), works with
+#     the marcoslucianops/DeepStream-Yolo parser we built from source
+#
+# Output tensor confirmed via trtexec:
+#   Input:  images       1x3x640x640
+#   Output: output0      1x5x8400   (cx, cy, w, h, person_conf × 8400 proposals)
+
+[property]
+gpu-id=0
+net-scale-factor=0.0039215697906911373
+offsets=0;0;0
+model-color-format=0
+network-mode=0
+num-detected-classes=1
+gie-unique-id=1
+process-mode=1
+batch-size=1
+
+# Prebuilt YOLOv8 engine (FP32 — file lacked INT8 calibration data)
+model-engine-file=/models/yolov8_person.engine
+labelfile-path=/workspace/configs/person_labels.txt
+
+# YOLOv8 input dims
+infer-dims=3;640;640
+
+# Single output tensor (YOLOv8 native — concatenated bbox + conf + classes)
+output-blob-names=output0
+
+# Custom parser — built from marcoslucianops/DeepStream-Yolo, baked into image
+parse-bbox-func-name=NvDsInferParseYolo
+custom-lib-path=/opt/yolo/libnvdsinfer_custom_impl_Yolo.so
+
+# DeepStream-Yolo parser does NMS internally → tell DS to skip its own clustering
+cluster-mode=4
+maintain-aspect-ratio=1
+
+[class-attrs-all]
+pre-cluster-threshold=0.25

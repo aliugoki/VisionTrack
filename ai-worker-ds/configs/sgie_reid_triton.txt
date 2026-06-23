@@ -1,0 +1,60 @@
+# OSNet ReID SGIE — nvinferserver (in-process Triton) backend
+#
+# Replaces sgie_reid.txt (nvinfer) for the P2.3b investigation.
+# Per the isolation finding: nvinfer + BUFFER probe + SGIE crashes DS 7.1
+# in our docker image. nvinferserver uses a completely different code
+# path so it MAY sidestep the segfault.
+
+infer_config {
+  unique_id: 4
+  gpu_ids: [0]
+  max_batch_size: 16
+
+  backend {
+    triton {
+      model_name: "osnet_reid"
+      version: -1
+      model_repo {
+        root: "/triton_models"
+        strict_model_config: true
+      }
+    }
+  }
+
+  preprocess {
+    network_format: IMAGE_FORMAT_RGB
+    tensor_order: TENSOR_ORDER_LINEAR
+    maintain_aspect_ratio: 0
+    frame_scaling_hw: FRAME_SCALING_HW_DEFAULT
+    frame_scaling_filter: 1
+    normalize {
+      scale_factor: 0.0039215697906911373
+      channel_offsets: [0.0, 0.0, 0.0]
+    }
+  }
+
+  # Output tensors are returned as user-meta on the obj_meta_list.
+  # Same as output-tensor-meta=1 with nvinfer, but the meta attachment
+  # is on the nvinferserver code path.
+  extra {
+    copy_input_to_host_buffers: false
+    output_buffer_pool_size: 4
+  }
+}
+
+input_control {
+  process_mode: PROCESS_MODE_CLIP_OBJECTS
+  operate_on_gie_id: 1
+  operate_on_class_ids: [0]
+  async_mode: true
+  object_control {
+    bbox_filter {
+      min_width: 64
+      min_height: 64
+    }
+  }
+}
+
+output_control {
+  output_tensor_meta: true
+}

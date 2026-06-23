@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light mode — used rarely; operators run dark */
+    --background: 220 14% 96%;
+    --foreground: 220 25% 12%;
+    --surface: 0 0% 100%;
+    --muted: 220 14% 92%;
+    --muted-foreground: 220 9% 40%;
+    --border: 220 13% 88%;
+    --input: 220 13% 88%;
+    --ring: 174 80% 35%;
+
+    --primary: 174 80% 35%;
+    --primary-foreground: 0 0% 100%;
+    --accent: 174 80% 35%;
+    --accent-foreground: 0 0% 100%;
+    --danger: 0 75% 50%;
+    --danger-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 30 80% 12%;
+    --success: 142 65% 40%;
+    --success-foreground: 0 0% 100%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* Dark mode — the default for command-center work */
+    --background: 220 20% 6%;
+    --foreground: 220 14% 92%;
+    --surface: 220 18% 10%;
+    --muted: 220 16% 14%;
+    --muted-foreground: 220 9% 60%;
+    --border: 220 14% 18%;
+    --input: 220 14% 18%;
+    --ring: 174 70% 45%;
+
+    --primary: 174 70% 45%;
+    --primary-foreground: 220 25% 8%;
+    --accent: 174 70% 45%;
+    --accent-foreground: 220 25% 8%;
+    --danger: 0 72% 55%;
+    --danger-foreground: 0 0% 100%;
+    --warning: 38 92% 55%;
+    --warning-foreground: 30 80% 8%;
+    --success: 142 60% 45%;
+    --success-foreground: 0 0% 100%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  /* RTL support for Arabic */
+  [dir="rtl"] body {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  /* Monospace for technical values: timestamps, IDs, coordinates */
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-feature-settings: "ss01", "ss02";
+  }
+
+  /* Hide scrollbar but keep functional */
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 3px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+}
+
+@layer utilities {
+  /* Subtle pulse for live indicators */
+  @keyframes live-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .animate-live-pulse {
+    animation: live-pulse 2s ease-in-out infinite;
+  }
+}

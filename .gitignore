@@ -1,0 +1,64 @@
+# =============================================================================
+# VisionTrack — git ignore
+# =============================================================================
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Node / Vite
+node_modules/
+dist/
+.vite/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Docker volumes / runtime data
+data/
+recordings/
+*.sqlite
+*.sqlite3
+
+# Build artifacts
+build/
+*.tar
+*.tar.gz
+*.zip
+*.dump
+
+# AI/ML model weights (will be downloaded at runtime, not committed)
+ai-worker/models/*.pt
+ai-worker/models/*.onnx
+ai-worker/models/*.engine
+
+# Vendored external repo (has its own .git)
+ai-worker-ds/external/DeepStream-Yolo/

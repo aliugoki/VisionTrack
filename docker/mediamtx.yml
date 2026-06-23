@@ -1,0 +1,84 @@
+# =============================================================================
+# MediaMTX configuration for VisionTrack
+# Full reference: https://github.com/bluenviron/mediamtx
+# =============================================================================
+
+# -- Logging -------------------------------------------------------------------
+logLevel: info
+logDestinations: [stdout]
+
+# -- Control API (used by the backend to add/remove cameras at runtime) -------
+# Auth is disabled because the API is only reachable on the internal Docker
+# network. In production, the API port (9997) is NOT exposed externally —
+# only HLS (8888) and WebRTC (8889) cross the trust boundary.
+api: yes
+apiAddress: :9997
+
+# -- Authentication ------------------------------------------------------------
+# By default MediaMTX 1.9+ requires auth on the control API. We disable it
+# here because:
+#   1. Port 9997 is only reachable from the backend container (Docker bridge)
+#   2. Cameras publish via RTSP, not via the API — only the backend uses 9997
+#   3. The HLS endpoint (8888) is the only public-facing media surface and
+#      it doesn't require auth for read access by design
+authMethod: internal
+authInternalUsers:
+  # Permit anonymous publish/read for paths (cameras push, browsers consume)
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: publish
+      - action: read
+      - action: playback
+  # Permit anonymous control API calls from the backend container
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: api
+
+# -- RTSP server (cameras push here) ------------------------------------------
+rtsp: yes
+rtspAddress: :8554
+#rtspTransports: [tcp]
+
+# -- HLS server (browsers consume here, replayable with HLS.js) ---------------
+# MediaMTX defaults to Low-Latency HLS variant, which requires >= 7 segments.
+# We bump the segment count to 7 (minimum) for compatibility. Total buffer
+# window = 7 segments * 2s = 14 seconds of catch-up history, which is fine
+# for live monitoring and lets browsers recover smoothly from network blips.
+hls: yes
+hlsAddress: :8888
+hlsAllowOrigin: '*'
+hlsAlwaysRemux: yes
+hlsVariant: lowLatency
+hlsSegmentCount: 7
+hlsSegmentDuration: 2s
+hlsPartDuration: 500ms
+
+# -- WebRTC (lower-latency option for live wall, used in Phase 1 step 7) ------
+webrtc: yes
+webrtcAddress: :8889
+webrtcAllowOrigin: '*'
+
+# -- Recording -----------------------------------------------------------------
+# Each path can be recorded by the backend on demand by PATCHing this section
+# via the API. Defaults below apply when recording is enabled per path.
+recordPath: /recordings/%path/%Y-%m-%d_%H-%M-%S
+recordFormat: fmp4
+recordPartDuration: 1s
+recordSegmentDuration: 1h
+recordDeleteAfter: 720h   # 30 days
+
+# -- Path defaults -------------------------------------------------------------
+# Specific cameras are added dynamically by the backend's cameras module
+# via PATCH /v3/config/paths/add/{name}.
+pathDefaults:
+  source: publisher
+  sourceOnDemand: no
+  runOnRecordSegmentComplete: 'curl -sS -X POST -H "Content-Type: application/json" -d "{\"mediamtx_path\":\"$MTX_PATH\",\"file_path\":\"$MTX_SEGMENT_PATH\",\"started_at\":\"$MTX_SEGMENT_START_TIME\"}" http://backend:8000/api/v1/recordings/webhook/segment-complete || true'
+
+# Step 6C webhook: when MediaMTX finishes writing a segment file, POST
+# its metadata to the backend so the recordings table gets a row.
+# runOnRecordSegmentComplete: 'curl -sS -X POST -H "Content-Type: application/json" -d "{\"mediamtx_path\":\"$MTX_PATH\",\"file_path\":\"$MTX_SEGMENT_PATH\",\"started_at\":\"$MTX_SEGMENT_START_TIME\"}" http://backend:8000/api/v1/recordings/webhook/segment-complete || true'

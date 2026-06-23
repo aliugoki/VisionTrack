@@ -1,0 +1,29 @@
+# OSNet ReID — secondary GIE attached to YOLOv8 person detector
+#
+# Status: DISABLED at runtime (P2.3a deferral). DS 7.1 + this OSNet SGIE
+# combination segfaults on first object inference even with the
+# re-exported osnet_v2.engine (FullDims, dynamic batch, properly named
+# tensors). Root cause needs DS forum investigation. This config is
+# preserved as the intended P2.3b configuration once the crash is fixed.
+
+[property]
+gpu-id=0
+process-mode=2
+network-type=100
+gie-unique-id=4
+operate-on-gie-id=1
+operate-on-class-ids=0
+output-tensor-meta=0
+model-engine-file=/models/osnet_v2.engine
+labelfile-path=/workspace/configs/person_labels.txt
+infer-dims=3;256;128
+net-scale-factor=0.0039215697906911373
+offsets=0;0;0
+model-color-format=0
+network-mode=0
+batch-size=4
+interval=0
+output-blob-names=embedding
+
+[class-attrs-all]
+pre-cluster-threshold=0.5
