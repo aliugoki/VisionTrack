@@ -65,3 +65,32 @@ class PersonsSummary(BaseModel):
     active_last_24h: int
     new_today: int
     avg_appearances: float
+
+
+class KnownPerson(BaseModel):
+    """A recognized employee currently present in a zone."""
+    emp_id: str
+    name: str | None = None
+
+
+class ZoneOccupancy(BaseModel):
+    """Live headcount for one zone, split known vs unknown.
+
+    total = active tracks on the cameras whose markers fall in the zone.
+    known = those correlated to a face identity (an employee); unknown = the rest.
+    """
+    floor_plan_id: str
+    floor_plan_name: str | None = None
+    zone_id: str
+    zone_name: str
+    camera_ids: list[str]
+    total: int
+    known: int
+    unknown: int
+    known_people: list[KnownPerson]
+
+
+class ZoneOccupancyResponse(BaseModel):
+    as_of: datetime            # server time this snapshot was computed
+    active_window_sec: int     # a track counts as "present" if seen within this window
+    zones: list[ZoneOccupancy]

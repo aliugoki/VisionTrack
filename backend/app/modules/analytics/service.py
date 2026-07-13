@@ -27,12 +27,15 @@ from datetime import datetime, timedelta, UTC
 from typing import Literal
 from uuid import UUID
 
-from sqlalchemy import and_, distinct, func, select, text, tuple_
+from sqlalchemy import and_, distinct, func, or_, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.alerts.models import Alert
+from app.modules.analytics.occupancy import bucket_tracks_by_camera, zones_occupancy
+from app.modules.floor_plans.models import FloorPlan
+from app.modules.persons.models import PersonIdentity
 from app.modules.recordings.models import Recording
-from app.modules.tracks.models import TrackPoint
+from app.modules.tracks.models import Track, TrackPoint
 
 
 # Supported bucket sizes — keep this list short. The bucket name maps
@@ -300,4 +303,85 @@ async def get_persons_summary(
         "active_last_24h": int(row.active or 0),
         "new_today": int(row.new_today or 0),
         "avg_appearances": float(row.avg_app or 0.0),
+    }
+
+
+async def get_zone_occupancy(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    active_window_sec: int = 60,
+) -> dict:
+    """Live per-zone headcount, split known vs unknown.
+
+    A track is "present" if it hasn't ended and was updated within
+    ``active_window_sec``. It is "known" when it (or its person) carries a face
+    identity (``person_identities``) — i.e. the FaceTrack feed named it. Zone
+    occupancy sums the cameras whose floor-plan markers fall inside the zone
+    polygon (same model the alert evaluator uses). Pure aggregation is in
+    ``occupancy.py`` so it can be unit-tested without a DB.
+    """
+    now = datetime.now(UTC)
+    cutoff = now - timedelta(seconds=active_window_sec)
+
+    # 1) Active tracks (id + camera + person link).
+    active = (await db.execute(
+        select(Track.id, Track.camera_id, Track.person_id).where(
+            Track.tenant_id == tenant_id,
+            Track.ended_at.is_(None),
+            Track.updated_at >= cutoff,
+        )
+    )).all()
+
+    # 2) Strongest face identity per track (by track_id first, else by person_id).
+    track_ids = [r.id for r in active]
+    person_ids = [r.person_id for r in active if r.person_id is not None]
+    best_by_track: dict = {}
+    best_by_person: dict = {}
+    if track_ids or person_ids:
+        conds = []
+        if track_ids:
+            conds.append(PersonIdentity.track_id.in_(track_ids))
+        if person_ids:
+            conds.append(PersonIdentity.person_id.in_(person_ids))
+        ident_rows = (await db.execute(
+            select(
+                PersonIdentity.track_id, PersonIdentity.person_id,
+                PersonIdentity.emp_id, PersonIdentity.name,
+            ).where(PersonIdentity.tenant_id == tenant_id, or_(*conds))
+            .order_by(  # strongest first → first seen per key wins
+                PersonIdentity.votes.desc(),
+                PersonIdentity.confidence.desc(),
+                PersonIdentity.last_labeled_at.desc(),
+            )
+        )).all()
+        for row in ident_rows:
+            if row.track_id is not None and row.track_id not in best_by_track:
+                best_by_track[row.track_id] = (row.emp_id, row.name)
+            if row.person_id is not None and row.person_id not in best_by_person:
+                best_by_person[row.person_id] = (row.emp_id, row.name)
+
+    tracks = []
+    for r in active:
+        ident = best_by_track.get(r.id) or (
+            best_by_person.get(r.person_id) if r.person_id is not None else None)
+        tracks.append({
+            "track_id": str(r.id), "camera_id": str(r.camera_id),
+            "emp_id": ident[0] if ident else None,
+            "name": ident[1] if ident else None,
+        })
+    per_camera = bucket_tracks_by_camera(tracks)
+
+    # 3) Floor plans → zones → sum cameras in each polygon.
+    fps = [
+        {"id": r.id, "name": r.name, "zones": r.zones, "markers": r.markers}
+        for r in (await db.execute(
+            select(FloorPlan.id, FloorPlan.name, FloorPlan.zones, FloorPlan.markers)
+            .where(FloorPlan.tenant_id == tenant_id)
+        )).all()
+    ]
+    return {
+        "as_of": now,
+        "active_window_sec": active_window_sec,
+        "zones": zones_occupancy(fps, per_camera),
     }

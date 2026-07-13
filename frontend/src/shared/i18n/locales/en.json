@@ -651,6 +651,13 @@
       "activeLast24h": "Active (last 24h)",
       "newToday": "New today",
       "avgAppearances": "Avg. appearances"
+    },
+    "occupancy": {
+      "heading": "Live zone occupancy",
+      "empty": "No zones with active people. Define zones on a floor plan and place cameras inside them.",
+      "present": "present now",
+      "known": "{{n}} known",
+      "unknown": "{{n}} unknown"
     }
   },
   "persons": {

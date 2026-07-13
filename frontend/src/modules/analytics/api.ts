@@ -6,6 +6,7 @@ import type {
   PersonsSummary,
   OverviewKPIs,
   TimeseriesResponse,
+  ZoneOccupancyResponse,
 } from '@/modules/analytics/types';
 
 export const ANALYTICS_KEYS = {
@@ -85,6 +86,21 @@ export function usePersonsSummary() {
     refetchInterval: 60_000,
     queryFn: async () => {
       const { data } = await api.get<PersonsSummary>('/analytics/persons/summary');
+      return data;
+    },
+  });
+}
+
+// Live zone occupancy — refreshes every 5s (unlike the 60s analytics panels).
+export function useZoneOccupancy(windowSec = 60) {
+  return useQuery({
+    queryKey: ['analytics', 'zone-occupancy', windowSec] as const,
+    refetchInterval: 5_000,
+    queryFn: async () => {
+      const { data } = await api.get<ZoneOccupancyResponse>(
+        '/analytics/zones/occupancy',
+        { params: { window: windowSec } },
+      );
       return data;
     },
   });

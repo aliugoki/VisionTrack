@@ -30,12 +30,14 @@ from app.modules.analytics.schemas import (
     OverviewKPIs,
     PersonsSummary,
     TimeseriesResponse,
+    ZoneOccupancyResponse,
 )
 from app.modules.analytics.service import (
     get_alerts_breakdown,
     get_alerts_timeseries,
     get_overview,
     get_people_timeseries,
+    get_zone_occupancy,
 )
 from app.modules.users.models import User
 
@@ -78,6 +80,22 @@ async def overview_endpoint(
         started_before=end,
     )
     return OverviewKPIs(**data)
+
+
+@router.get("/zones/occupancy", response_model=ZoneOccupancyResponse)
+async def zones_occupancy_endpoint(
+    window: int = Query(
+        60, ge=5, le=600,
+        description="seconds; a track counts as present if seen within this window",
+    ),
+    current_user: User = Depends(RequirePermission(ANALYTICS_READ)),
+    db: Annotated[AsyncSession, Depends(get_db)] = ...,
+) -> ZoneOccupancyResponse:
+    """Live per-zone headcount (known vs unknown) across all floor plans."""
+    data = await get_zone_occupancy(
+        db, tenant_id=current_user.tenant_id, active_window_sec=window
+    )
+    return ZoneOccupancyResponse(**data)
 
 
 @router.get("/alerts/timeseries", response_model=TimeseriesResponse)

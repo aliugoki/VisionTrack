@@ -48,3 +48,27 @@ export interface PersonsSummary {
   new_today: number;
   avg_appearances: number;
 }
+
+
+export interface KnownPerson {
+  emp_id: string;
+  name: string | null;
+}
+
+export interface ZoneOccupancy {
+  floor_plan_id: string;
+  floor_plan_name: string | null;
+  zone_id: string;
+  zone_name: string;
+  camera_ids: string[];
+  total: number;
+  known: number;
+  unknown: number;
+  known_people: KnownPerson[];
+}
+
+export interface ZoneOccupancyResponse {
+  as_of: string;
+  active_window_sec: number;
+  zones: ZoneOccupancy[];
+}
