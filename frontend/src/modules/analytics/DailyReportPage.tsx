@@ -11,22 +11,67 @@ import {
 } from '@/modules/analytics/api';
 
 /**
- * Print-friendly daily zone report — a bare, chrome-less route (mounted outside
+ * Print-friendly zone report — a bare, chrome-less route (mounted outside
  * AppLayout) that renders a clean white document and lets the browser "Save as
- * PDF". A screen-only filter bar (date, employee, zone, min minutes) narrows the
- * report and is reflected in the printed header; all filters live in the URL so a
- * filtered report is shareable/bookmarkable. Section 1 is the per-employee
- * time-in-zone summary; then one movement timeline per employee.
+ * PDF". A screen-only filter bar (date range, employee, zone, min minutes)
+ * narrows the report and is reflected in the printed header; all filters live in
+ * the URL so a filtered report is shareable/bookmarkable. Section 1 is the
+ * per-employee time-in-zone summary; then one movement timeline per employee.
+ *
+ * Range params: `?from=YYYY-MM-DD&to=YYYY-MM-DD` (inclusive). Back-compat: a
+ * single `?date=YYYY-MM-DD` is treated as from=to=date. No params -> today.
  */
-function dayRange(dateStr: string | null): { from: string; to: string; label: string } {
-  if (dateStr && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    const start = new Date(`${dateStr}T00:00:00.000Z`);
-    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
-    return { from: start.toISOString(), to: end.toISOString(), label: dateStr };
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function ymd(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+function addDays(dateStr: string, n: number): string {
+  const d = new Date(`${dateStr}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return ymd(d);
+}
+function startOfMonth(dateStr: string): string {
+  return `${dateStr.slice(0, 7)}-01`;
+}
+
+interface Range {
+  fromIso: string;
+  toIso: string;
+  fromDate: string;
+  toDate: string;
+  label: string;
+}
+
+function resolveRange(params: URLSearchParams): Range {
+  const today = ymd(new Date());
+  const fromP = params.get('from');
+  const toP = params.get('to');
+  const single = params.get('date');
+
+  let fromDate: string;
+  let toDate: string;
+  if (fromP && DATE_RE.test(fromP)) {
+    fromDate = fromP;
+    toDate = toP && DATE_RE.test(toP) ? toP : fromP;
+  } else if (single && DATE_RE.test(single)) {
+    fromDate = single;
+    toDate = single;
+  } else {
+    fromDate = today;
+    toDate = today;
   }
-  const now = new Date();
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  return { from: start.toISOString(), to: now.toISOString(), label: start.toISOString().slice(0, 10) };
+  if (toDate < fromDate) [fromDate, toDate] = [toDate, fromDate];
+
+  const start = new Date(`${fromDate}T00:00:00.000Z`);
+  const end = new Date(`${addDays(toDate, 1)}T00:00:00.000Z`); // exclusive upper bound
+  return {
+    fromIso: start.toISOString(),
+    toIso: end.toISOString(),
+    fromDate,
+    toDate,
+    label: fromDate === toDate ? fromDate : `${fromDate} → ${toDate}`,
+  };
 }
 
 function fmtDuration(totalSeconds: number): string {
@@ -41,21 +86,27 @@ function fmtDuration(totalSeconds: number): string {
 function fmtClock(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 export default function DailyReportPage() {
   const { t } = useTranslation();
   const [params, setParams] = useSearchParams();
 
-  const dateParam = params.get('date');
   const emp = params.get('emp') || '';
   const zone = params.get('zone') || '';
   const minMinutes = Math.max(0, Number(params.get('min') || '0') || 0);
   const minSec = minMinutes * 60;
 
-  const { from, to, label } = useMemo(() => dayRange(dateParam), [dateParam]);
-  const { data, isLoading } = useZoneDwell({ from, to });
+  const range = useMemo(() => resolveRange(params), [params]);
+  const { fromIso, toIso, fromDate, toDate, label } = range;
+
+  const { data, isLoading } = useZoneDwell({ from: fromIso, to: toIso });
   const allRows = data?.rows ?? [];
 
   function setFilter(key: string, value: string) {
@@ -64,8 +115,23 @@ export default function DailyReportPage() {
     else next.delete(key);
     setParams(next, { replace: true });
   }
+  function setRange(f: string, to: string) {
+    const next = new URLSearchParams(params);
+    next.delete('date');
+    next.set('from', f);
+    next.set('to', to);
+    setParams(next, { replace: true });
+  }
 
-  // Dropdown options built from the UNFILTERED day so any value is selectable.
+  const today = ymd(new Date());
+  const presets = [
+    { key: 'today', from: today, to: today },
+    { key: 'yesterday', from: addDays(today, -1), to: addDays(today, -1) },
+    { key: 'last7', from: addDays(today, -6), to: today },
+    { key: 'last30', from: addDays(today, -29), to: today },
+    { key: 'thisMonth', from: startOfMonth(today), to: today },
+  ];
+
   const empOptions = useMemo(() => {
     const m = new Map<string, string>();
     for (const r of allRows) if (!m.has(r.emp_id)) m.set(r.emp_id, r.name || r.emp_id);
@@ -78,7 +144,6 @@ export default function DailyReportPage() {
     return [...m.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
   }, [allRows]);
 
-  // Apply the active filters.
   const rows = useMemo(
     () =>
       allRows.filter(
@@ -131,8 +196,8 @@ export default function DailyReportPage() {
             type="button"
             onClick={() =>
               downloadDwellCsv({
-                from,
-                to,
+                from: fromIso,
+                to: toIso,
                 minSeconds: minSec || undefined,
                 empId: emp || undefined,
                 zoneId: zone || undefined,
@@ -155,17 +220,39 @@ export default function DailyReportPage() {
       </div>
 
       {/* Screen-only filter bar */}
+      <div className="mb-2 flex flex-wrap items-center gap-1.5 print:hidden">
+        {presets.map((p) => {
+          const active = fromDate === p.from && toDate === p.to;
+          return (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => setRange(p.from, p.to)}
+              className={`rounded-md border px-2 py-1 text-xs ${
+                active
+                  ? 'border-gray-800 bg-gray-900 text-white'
+                  : 'border-gray-300 text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              {t(`analytics.report.range.${p.key}`)}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="mb-6 flex flex-wrap items-center gap-2 rounded-md border border-gray-200 bg-gray-50 p-2 print:hidden">
         <span className="flex items-center gap-1 text-xs font-semibold text-gray-500">
           <Filter className="h-3.5 w-3.5" />
           {t('analytics.report.filters')}
         </span>
-        <input
-          type="date"
-          className={inputCls}
-          value={label}
-          onChange={(e) => setFilter('date', e.target.value)}
-        />
+        <label className="flex items-center gap-1 text-sm text-gray-700">
+          {t('analytics.report.from')}
+          <input type="date" className={inputCls} value={fromDate} onChange={(e) => setRange(e.target.value, toDate)} />
+        </label>
+        <label className="flex items-center gap-1 text-sm text-gray-700">
+          {t('analytics.report.to')}
+          <input type="date" className={inputCls} value={toDate} onChange={(e) => setRange(fromDate, e.target.value)} />
+        </label>
         <select className={inputCls} value={emp} onChange={(e) => setFilter('emp', e.target.value)}>
           <option value="">{t('analytics.report.allEmployees')}</option>
           {empOptions.map((o) => (
@@ -195,7 +282,7 @@ export default function DailyReportPage() {
         {hasFilters && (
           <button
             type="button"
-            onClick={() => setParams(dateParam ? { date: dateParam } : {}, { replace: true })}
+            onClick={() => setRange(fromDate, toDate)}
             className="rounded-md px-2 py-1 text-xs text-gray-500 underline hover:text-gray-800"
           >
             {t('analytics.report.reset')}
@@ -267,8 +354,8 @@ export default function DailyReportPage() {
                 key={p.emp_id}
                 empId={p.emp_id}
                 name={p.name}
-                from={from}
-                to={to}
+                from={fromIso}
+                to={toIso}
                 zoneId={zone}
               />
             ))}
@@ -309,7 +396,7 @@ function EmployeeTimelineSection({
       <ol className="mt-1 space-y-0.5 text-sm">
         {segs.map((s, i) => (
           <li key={`${s.zone_id}:${s.start}:${i}`} className="flex items-center gap-2">
-            <span className="w-28 shrink-0 font-mono text-xs tabular-nums text-gray-600">
+            <span className="w-36 shrink-0 font-mono text-xs tabular-nums text-gray-600">
               {fmtClock(s.start)} – {s.present ? t('analytics.timeline.now') : fmtClock(s.end)}
             </span>
             <span className="font-medium">{s.zone_name}</span>
