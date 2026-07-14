@@ -155,10 +155,25 @@ function todayStamp(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** Download today's per-employee zone dwell as CSV. */
-export async function downloadDwellCsv(): Promise<void> {
+export interface DwellFilters {
+  from?: string;
+  to?: string;
+  minSeconds?: number;
+  empId?: string;
+  zoneId?: string;
+}
+
+/** Download per-employee zone dwell as CSV, honouring the given filters. */
+export async function downloadDwellCsv(filters: DwellFilters = {}): Promise<void> {
   const { data } = await api.get<Blob>('/analytics/zones/dwell.csv', {
     responseType: 'blob',
+    params: {
+      from: filters.from,
+      to: filters.to,
+      min_seconds: filters.minSeconds,
+      emp_id: filters.empId,
+      zone_id: filters.zoneId,
+    },
   });
   triggerDownload(data, `zone-dwell-${todayStamp()}.csv`);
 }

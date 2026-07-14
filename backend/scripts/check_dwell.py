@@ -215,6 +215,25 @@ async def main() -> None:
         _assert(len(tcsv.splitlines()) == 3 and "Sales" in tcsv,
                 "timeline CSV = header + Ali's 2 Sales visits")
 
+        # ---- Reporting filters (emp_id / zone_id).
+        sales_zone = next(r["zone_id"] for r in data["rows"] if r["zone_name"] == "Sales")
+        by_emp = await get_zone_dwell(
+            db, tenant_id=tenant.id,
+            started_after=now - timedelta(hours=3), started_before=now + timedelta(hours=1),
+            emp_id="E1")
+        _assert({r["emp_id"] for r in by_emp["rows"]} == {"E1"}, "emp_id filter returns only Ali")
+        by_zone = await get_zone_dwell(
+            db, tenant_id=tenant.id,
+            started_after=now - timedelta(hours=3), started_before=now + timedelta(hours=1),
+            zone_id=sales_zone)
+        _assert({r["zone_name"] for r in by_zone["rows"]} == {"Sales"},
+                "zone_id filter returns only Sales")
+        both = await get_zone_dwell(
+            db, tenant_id=tenant.id,
+            started_after=now - timedelta(hours=3), started_before=now + timedelta(hours=1),
+            emp_id="E2", zone_id=sales_zone)
+        _assert(both["rows"] == [], "emp_id=Sara + zone=Sales -> empty (Sara is in Production)")
+
         # ---- Desk-level precision: ONE calibrated camera covering two desks.
         # A homography mapping 1000x1000 px -> 0..1 fractions; two people at
         # different x land in different desk polygons (marker mode would lump both

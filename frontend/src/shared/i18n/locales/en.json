@@ -718,7 +718,13 @@
       "summaryHeading": "Time in zones",
       "movementHeading": "Movement timeline",
       "total": "Total {{time}}",
-      "noData": "No zone activity recorded for this day."
+      "noData": "No zone activity recorded for this day.",
+      "filters": "Filters",
+      "allEmployees": "All employees",
+      "allZones": "All zones",
+      "minMinutes": "Min minutes",
+      "minLabel": "≥ {{n}}m",
+      "reset": "Reset"
     }
   },
   "persons": {

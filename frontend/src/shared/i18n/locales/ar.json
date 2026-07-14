@@ -718,7 +718,13 @@
       "summaryHeading": "الوقت في المناطق",
       "movementHeading": "مخطط التنقل",
       "total": "الإجمالي {{time}}",
-      "noData": "لا يوجد نشاط مناطق مسجَّل لهذا اليوم."
+      "noData": "لا يوجد نشاط مناطق مسجَّل لهذا اليوم.",
+      "filters": "المرشحات",
+      "allEmployees": "كل الموظفين",
+      "allZones": "كل المناطق",
+      "minMinutes": "أدنى دقائق",
+      "minLabel": "≥ {{n}} دقيقة",
+      "reset": "إعادة تعيين"
     }
   },
   "persons": {

@@ -115,6 +115,8 @@ async def zones_dwell_endpoint(
         0, ge=0,
         description="drop (person, zone) rows below this many seconds of dwell",
     ),
+    emp_id: str | None = Query(None, description="filter to one employee"),
+    zone_id: str | None = Query(None, description="filter to one zone"),
     current_user: User = Depends(RequirePermission(ANALYTICS_READ)),
     db: Annotated[AsyncSession, Depends(get_db)] = ...,
 ) -> ZoneDwellResponse:
@@ -122,6 +124,7 @@ async def zones_dwell_endpoint(
 
     Which named person was in which department/desk, for how long, and who is
     there right now. Defaults to today (start of the current UTC day → now).
+    Optional ``emp_id`` / ``zone_id`` filters narrow the report.
     """
     end = to_ or datetime.now(timezone.utc)
     start = from_ or end.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -136,6 +139,8 @@ async def zones_dwell_endpoint(
         started_before=end,
         active_window_sec=window,
         min_seconds=min_seconds,
+        emp_id=emp_id,
+        zone_id=zone_id,
     )
     return ZoneDwellResponse(**data)
 
@@ -211,15 +216,18 @@ async def zones_dwell_csv(
     to_: datetime | None = Query(None, alias="to"),
     window: int = Query(60, ge=5, le=600),
     min_seconds: int = Query(0, ge=0),
+    emp_id: str | None = Query(None),
+    zone_id: str | None = Query(None),
     current_user: User = Depends(RequirePermission(ANALYTICS_READ)),
     db: Annotated[AsyncSession, Depends(get_db)] = ...,
 ) -> Response:
-    """Download per-employee zone dwell for the day as CSV."""
+    """Download per-employee zone dwell for the day as CSV (with optional filters)."""
     start, end = _daily_range(from_, to_)
     data = await get_zone_dwell(
         db, tenant_id=current_user.tenant_id,
         started_after=start, started_before=end,
         active_window_sec=window, min_seconds=min_seconds,
+        emp_id=emp_id, zone_id=zone_id,
     )
     return _csv_response(dwell_csv(data), f"zone-dwell-{start.date()}.csv")
 

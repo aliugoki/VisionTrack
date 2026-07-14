@@ -555,6 +555,8 @@ async def get_zone_dwell(
     started_before: datetime,
     active_window_sec: int = 60,
     min_seconds: int = 0,
+    emp_id: str | None = None,
+    zone_id: str | None = None,
 ) -> dict:
     """Per-named-person time-in-zone over ``[started_after, started_before)``.
 
@@ -615,6 +617,8 @@ async def get_zone_dwell(
     dwell_rows = [
         row for row in accumulate_dwell(tracks)
         if row["seconds"] >= min_seconds
+        and (emp_id is None or row["emp_id"] == emp_id)
+        and (zone_id is None or row["zone_id"] == zone_id)
     ]
     return {
         "as_of": now,
