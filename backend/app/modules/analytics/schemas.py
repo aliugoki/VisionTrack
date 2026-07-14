@@ -155,3 +155,29 @@ class PersonTimelineResponse(BaseModel):
     segments: list[TimelineSegment]
 
     model_config = {"populate_by_name": True}
+
+
+class AttendanceRow(BaseModel):
+    """One employee's attendance over the window.
+
+    ``span_seconds`` is the wall-clock arrival->departure window;
+    ``tracked_seconds`` is the total time actually inside monitored zones (can
+    exceed span when zones overlap).
+    """
+    emp_id: str
+    name: str | None = None
+    arrival: datetime
+    departure: datetime
+    span_seconds: float
+    tracked_seconds: float
+    zones_count: int
+    present: bool
+
+
+class AttendanceResponse(BaseModel):
+    as_of: datetime
+    from_: datetime = Field(alias="from")
+    to: datetime
+    rows: list[AttendanceRow]
+
+    model_config = {"populate_by_name": True}

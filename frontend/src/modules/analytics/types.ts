@@ -116,3 +116,21 @@ export interface PersonTimelineResponse {
   total_seconds: number;
   segments: TimelineSegment[];
 }
+
+export interface AttendanceRow {
+  emp_id: string;
+  name: string | null;
+  arrival: string; // ISO datetime
+  departure: string; // ISO datetime
+  span_seconds: number; // wall-clock arrival -> departure
+  tracked_seconds: number; // total time inside zones
+  zones_count: number;
+  present: boolean;
+}
+
+export interface AttendanceResponse {
+  as_of: string;
+  from: string;
+  to: string;
+  rows: AttendanceRow[];
+}

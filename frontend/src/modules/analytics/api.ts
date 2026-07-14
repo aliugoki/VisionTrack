@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
 import type {
   AlertsBreakdownResponse,
+  AttendanceResponse,
   DateRange,
   PersonsSummary,
   OverviewKPIs,
@@ -189,6 +190,48 @@ export async function downloadTimelineCsv(
   );
   const who = (name || empId).replace(/[^\w-]+/g, '_').slice(0, 40);
   triggerDownload(data, `timeline-${who}-${todayStamp()}.csv`);
+}
+
+/** Per-employee attendance (arrival / departure / on-site span / tracked). */
+export function useAttendance(filters: DwellFilters = {}) {
+  return useQuery({
+    queryKey: [
+      'analytics',
+      'attendance',
+      filters.from ?? null,
+      filters.to ?? null,
+      filters.minSeconds ?? 0,
+      filters.empId ?? null,
+      filters.zoneId ?? null,
+    ] as const,
+    queryFn: async () => {
+      const { data } = await api.get<AttendanceResponse>('/analytics/attendance', {
+        params: {
+          from: filters.from,
+          to: filters.to,
+          min_seconds: filters.minSeconds,
+          emp_id: filters.empId,
+          zone_id: filters.zoneId,
+        },
+      });
+      return data;
+    },
+  });
+}
+
+/** Download per-employee attendance as CSV, honouring the given filters. */
+export async function downloadAttendanceCsv(filters: DwellFilters = {}): Promise<void> {
+  const { data } = await api.get<Blob>('/analytics/attendance.csv', {
+    responseType: 'blob',
+    params: {
+      from: filters.from,
+      to: filters.to,
+      min_seconds: filters.minSeconds,
+      emp_id: filters.empId,
+      zone_id: filters.zoneId,
+    },
+  });
+  triggerDownload(data, `attendance-${todayStamp()}.csv`);
 }
 
 // "Where was X today" — one employee's chronological zone-visit timeline.

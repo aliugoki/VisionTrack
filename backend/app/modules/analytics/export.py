@@ -55,6 +55,27 @@ def dwell_csv(data: dict) -> str:
     return buf.getvalue()
 
 
+def attendance_csv(data: dict) -> str:
+    """CSV of ``get_attendance`` output: one row per employee."""
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow([
+        "employee_id", "employee_name", "arrival", "departure",
+        "span_seconds", "span", "tracked_seconds", "tracked",
+        "zones", "present",
+    ])
+    for r in data.get("rows", []):
+        w.writerow([
+            _safe(r.get("emp_id")), _safe(r.get("name")),
+            _iso(r.get("arrival")), _iso(r.get("departure")),
+            int(round(r.get("span_seconds", 0))), _hms(r.get("span_seconds", 0)),
+            int(round(r.get("tracked_seconds", 0))), _hms(r.get("tracked_seconds", 0)),
+            r.get("zones_count", 0),
+            "yes" if r.get("present") else "no",
+        ])
+    return buf.getvalue()
+
+
 def timeline_csv(data: dict) -> str:
     """CSV of ``get_person_timeline`` output: one row per zone visit, in order."""
     buf = io.StringIO()

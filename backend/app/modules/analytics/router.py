@@ -25,9 +25,10 @@ from app.core.db import get_db
 from app.core.deps import RequirePermission
 from app.core.permissions import ANALYTICS_READ
 from app.modules.analytics import service
-from app.modules.analytics.export import dwell_csv, timeline_csv
+from app.modules.analytics.export import attendance_csv, dwell_csv, timeline_csv
 from app.modules.analytics.schemas import (
     AlertsBreakdownResponse,
+    AttendanceResponse,
     OverviewKPIs,
     PersonsSummary,
     PersonTimelineResponse,
@@ -38,6 +39,7 @@ from app.modules.analytics.schemas import (
 from app.modules.analytics.service import (
     get_alerts_breakdown,
     get_alerts_timeseries,
+    get_attendance,
     get_overview,
     get_people_timeseries,
     get_person_timeline,
@@ -230,6 +232,50 @@ async def zones_dwell_csv(
         emp_id=emp_id, zone_id=zone_id,
     )
     return _csv_response(dwell_csv(data), f"zone-dwell-{start.date()}.csv")
+
+
+@router.get("/attendance", response_model=AttendanceResponse)
+async def attendance_endpoint(
+    from_: datetime | None = Query(None, alias="from"),
+    to_: datetime | None = Query(None, alias="to"),
+    window: int = Query(60, ge=5, le=600),
+    min_seconds: int = Query(0, ge=0),
+    emp_id: str | None = Query(None),
+    zone_id: str | None = Query(None),
+    current_user: User = Depends(RequirePermission(ANALYTICS_READ)),
+    db: Annotated[AsyncSession, Depends(get_db)] = ...,
+) -> AttendanceResponse:
+    """Per-employee attendance (arrival / departure / on-site span / tracked)."""
+    start, end = _daily_range(from_, to_)
+    data = await get_attendance(
+        db, tenant_id=current_user.tenant_id,
+        started_after=start, started_before=end,
+        active_window_sec=window, min_seconds=min_seconds,
+        emp_id=emp_id, zone_id=zone_id,
+    )
+    return AttendanceResponse(**data)
+
+
+@router.get("/attendance.csv")
+async def attendance_csv_endpoint(
+    from_: datetime | None = Query(None, alias="from"),
+    to_: datetime | None = Query(None, alias="to"),
+    window: int = Query(60, ge=5, le=600),
+    min_seconds: int = Query(0, ge=0),
+    emp_id: str | None = Query(None),
+    zone_id: str | None = Query(None),
+    current_user: User = Depends(RequirePermission(ANALYTICS_READ)),
+    db: Annotated[AsyncSession, Depends(get_db)] = ...,
+) -> Response:
+    """Download per-employee attendance for the range as CSV."""
+    start, end = _daily_range(from_, to_)
+    data = await get_attendance(
+        db, tenant_id=current_user.tenant_id,
+        started_after=start, started_before=end,
+        active_window_sec=window, min_seconds=min_seconds,
+        emp_id=emp_id, zone_id=zone_id,
+    )
+    return _csv_response(attendance_csv(data), f"attendance-{start.date()}.csv")
 
 
 @router.get("/persons/{emp_id}/timeline.csv")

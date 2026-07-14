@@ -31,6 +31,7 @@ from sqlalchemy import and_, distinct, func, or_, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.alerts.models import Alert
+from app.modules.analytics.attendance import attendance_from_dwell
 from app.modules.analytics.dwell import (
     accumulate_dwell,
     build_person_timeline,
@@ -626,6 +627,33 @@ async def get_zone_dwell(
         "to": started_before,
         "active_window_sec": active_window_sec,
         "rows": dwell_rows,
+    }
+
+
+async def get_attendance(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    started_after: datetime,
+    started_before: datetime,
+    active_window_sec: int = 60,
+    min_seconds: int = 0,
+    emp_id: str | None = None,
+    zone_id: str | None = None,
+) -> dict:
+    """Per-employee attendance (arrival / departure / on-site span / tracked time)
+    over the window. Rolls up ``get_zone_dwell`` so both stay consistent."""
+    dwell = await get_zone_dwell(
+        db, tenant_id=tenant_id,
+        started_after=started_after, started_before=started_before,
+        active_window_sec=active_window_sec, min_seconds=min_seconds,
+        emp_id=emp_id, zone_id=zone_id,
+    )
+    return {
+        "as_of": dwell["as_of"],
+        "from": dwell["from"],
+        "to": dwell["to"],
+        "rows": attendance_from_dwell(dwell["rows"]),
     }
 
 

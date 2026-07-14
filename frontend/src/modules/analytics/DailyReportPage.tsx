@@ -6,8 +6,10 @@ import { Printer, X, Download, Filter } from 'lucide-react';
 import { Spinner } from '@/shared/components/Spinner';
 import {
   useZoneDwell,
+  useAttendance,
   usePersonTimeline,
   downloadDwellCsv,
+  downloadAttendanceCsv,
 } from '@/modules/analytics/api';
 
 /**
@@ -109,6 +111,16 @@ export default function DailyReportPage() {
   const { data, isLoading } = useZoneDwell({ from: fromIso, to: toIso });
   const allRows = data?.rows ?? [];
 
+  const attFilters = {
+    from: fromIso,
+    to: toIso,
+    minSeconds: minSec || undefined,
+    empId: emp || undefined,
+    zoneId: zone || undefined,
+  };
+  const { data: att } = useAttendance(attFilters);
+  const attRows = att?.rows ?? [];
+
   function setFilter(key: string, value: string) {
     const next = new URLSearchParams(params);
     if (value) next.set(key, value);
@@ -195,18 +207,22 @@ export default function DailyReportPage() {
           <button
             type="button"
             onClick={() =>
-              downloadDwellCsv({
-                from: fromIso,
-                to: toIso,
-                minSeconds: minSec || undefined,
-                empId: emp || undefined,
-                zoneId: zone || undefined,
-              }).catch(() => toast.error(t('common.exportFailed')))
+              downloadAttendanceCsv(attFilters).catch(() => toast.error(t('common.exportFailed')))
             }
             className="flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
           >
             <Download className="h-4 w-4" />
-            {t('common.exportCsv')}
+            {t('analytics.report.attendanceCsv')}
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              downloadDwellCsv(attFilters).catch(() => toast.error(t('common.exportFailed')))
+            }
+            className="flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+          >
+            <Download className="h-4 w-4" />
+            {t('analytics.report.dwellCsv')}
           </button>
           <button
             type="button"
@@ -305,6 +321,45 @@ export default function DailyReportPage() {
         <p className="text-sm text-gray-600">{t('analytics.report.noData')}</p>
       ) : (
         <>
+          {/* Attendance summary */}
+          {attRows.length > 0 && (
+            <section className="mb-8">
+              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
+                {t('analytics.report.attendanceHeading')}
+              </h2>
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b-2 border-gray-400 text-left">
+                    <th className="py-1.5 pr-3 font-semibold">{t('analytics.dwell.person')}</th>
+                    <th className="py-1.5 pr-3 font-semibold">{t('analytics.report.arrival')}</th>
+                    <th className="py-1.5 pr-3 font-semibold">{t('analytics.report.departure')}</th>
+                    <th className="py-1.5 pr-3 text-right font-semibold">{t('analytics.report.onSite')}</th>
+                    <th className="py-1.5 pr-3 text-right font-semibold">{t('analytics.report.tracked')}</th>
+                    <th className="py-1.5 pr-3 text-right font-semibold">{t('analytics.report.zones')}</th>
+                    <th className="py-1.5 font-semibold">{t('analytics.dwell.status')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {attRows.map((a) => (
+                    <tr key={a.emp_id} className="break-inside-avoid border-b border-gray-200">
+                      <td className="py-1.5 pr-3 font-medium">{a.name || a.emp_id}</td>
+                      <td className="py-1.5 pr-3 tabular-nums">{fmtClock(a.arrival)}</td>
+                      <td className="py-1.5 pr-3 tabular-nums">
+                        {a.present ? t('analytics.timeline.now') : fmtClock(a.departure)}
+                      </td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums">{fmtDuration(a.span_seconds)}</td>
+                      <td className="py-1.5 pr-3 text-right font-medium tabular-nums">{fmtDuration(a.tracked_seconds)}</td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums">{a.zones_count}</td>
+                      <td className="py-1.5">
+                        {a.present ? t('analytics.dwell.hereNow') : t('analytics.report.departed')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
+
           <section className="mb-8">
             <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
               {t('analytics.report.summaryHeading')}

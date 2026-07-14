@@ -22,7 +22,11 @@ from sqlalchemy import delete
 import app.core.models  # noqa: F401 -- registers every ORM model (relationships)
 from app.core.db import AsyncSessionLocal
 from app.modules.analytics.export import dwell_csv, timeline_csv
-from app.modules.analytics.service import get_person_timeline, get_zone_dwell
+from app.modules.analytics.service import (
+    get_attendance,
+    get_person_timeline,
+    get_zone_dwell,
+)
 from app.modules.cameras.models import Camera
 from app.modules.floor_plans.models import FloorPlan
 from app.modules.persons.models import PersonIdentity
@@ -233,6 +237,23 @@ async def main() -> None:
             started_after=now - timedelta(hours=3), started_before=now + timedelta(hours=1),
             emp_id="E2", zone_id=sales_zone)
         _assert(both["rows"] == [], "emp_id=Sara + zone=Sales -> empty (Sara is in Production)")
+
+        # ---- Attendance rollup (arrival / departure / span / tracked).
+        att = await get_attendance(
+            db, tenant_id=tenant.id,
+            started_after=now - timedelta(hours=3), started_before=now + timedelta(hours=1))
+        amap = {a["emp_id"]: a for a in att["rows"]}
+        print("\nAttendance:")
+        for a in att["rows"]:
+            print(f"  {a['name']:<5} span={int(a['span_seconds'])//60}m "
+                  f"tracked={int(a['tracked_seconds'])//60}m zones={a['zones_count']} present={a['present']}")
+        _assert([a["emp_id"] for a in att["rows"]] == ["E1", "E2"],
+                "attendance sorted by arrival (Ali then Sara)")
+        _assert(amap["E1"]["tracked_seconds"] == 2970 and amap["E1"]["zones_count"] == 1,
+                "Ali tracked=2970s, 1 zone")
+        _assert(amap["E1"]["present"] is True, "Ali present")
+        _assert(amap["E2"]["tracked_seconds"] == 2400 and amap["E2"]["present"] is False,
+                "Sara tracked=2400s, not present")
 
         # ---- Desk-level precision: ONE calibrated camera covering two desks.
         # A homography mapping 1000x1000 px -> 0..1 fractions; two people at
