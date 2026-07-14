@@ -8,6 +8,8 @@
     "save": "Save",
     "undo": "Undo",
     "clear": "Clear",
+    "exportCsv": "Export CSV",
+    "exportFailed": "Export failed",
     "cancel": "Cancel",
     "back": "Back",
     "delete": "Delete",

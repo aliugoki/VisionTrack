@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Route, MapPin } from 'lucide-react';
+import { toast } from 'sonner';
+import { Route, MapPin, Download } from 'lucide-react';
 import { Badge } from '@/shared/components/Badge';
 import { Card } from '@/shared/components/Card';
 import { Spinner } from '@/shared/components/Spinner';
-import { useZoneDwell, usePersonTimeline } from '@/modules/analytics/api';
+import {
+  useZoneDwell,
+  usePersonTimeline,
+  downloadTimelineCsv,
+} from '@/modules/analytics/api';
 import type { TimelineSegment } from '@/modules/analytics/types';
 
 /**
@@ -83,6 +88,21 @@ export function PersonTimelinePanel() {
                 </option>
               ))}
             </select>
+            <button
+              type="button"
+              disabled={!selected || segments.length === 0}
+              onClick={() => {
+                if (!selected) return;
+                const who = people.find((p) => p.emp_id === selected)?.label;
+                downloadTimelineCsv(selected, who).catch(() =>
+                  toast.error(t('common.exportFailed')),
+                );
+              }}
+              className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Download className="h-3.5 w-3.5" />
+              {t('common.exportCsv')}
+            </button>
           </div>
         )}
       </div>

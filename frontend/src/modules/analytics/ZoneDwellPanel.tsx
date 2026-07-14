@@ -1,9 +1,10 @@
 import { useTranslation } from 'react-i18next';
-import { Timer } from 'lucide-react';
+import { toast } from 'sonner';
+import { Timer, Download } from 'lucide-react';
 import { Badge } from '@/shared/components/Badge';
 import { Card } from '@/shared/components/Card';
 import { Spinner } from '@/shared/components/Spinner';
-import { useZoneDwell } from '@/modules/analytics/api';
+import { useZoneDwell, downloadDwellCsv } from '@/modules/analytics/api';
 import type { ZoneDwellRow } from '@/modules/analytics/types';
 
 /**
@@ -56,6 +57,16 @@ export function ZoneDwellPanel() {
             <Badge tone="success">
               {t('analytics.dwell.hereNowCount', { n: hereNow })}
             </Badge>
+            <button
+              type="button"
+              onClick={() =>
+                downloadDwellCsv().catch(() => toast.error(t('common.exportFailed')))
+              }
+              className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <Download className="h-3.5 w-3.5" />
+              {t('common.exportCsv')}
+            </button>
           </div>
         )}
       </div>

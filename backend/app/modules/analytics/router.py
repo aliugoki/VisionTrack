@@ -18,13 +18,14 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.deps import RequirePermission
 from app.core.permissions import ANALYTICS_READ
 from app.modules.analytics import service
+from app.modules.analytics.export import dwell_csv, timeline_csv
 from app.modules.analytics.schemas import (
     AlertsBreakdownResponse,
     OverviewKPIs,
@@ -175,6 +176,73 @@ async def person_timeline_endpoint(
         merge_gap_seconds=merge_gap,
     )
     return PersonTimelineResponse(**data)
+
+
+def _daily_range(
+    from_: datetime | None, to_: datetime | None
+) -> tuple[datetime, datetime]:
+    """Resolve nullable from/to into a today-default UTC interval (start of the
+    current day -> now), matching the dwell/timeline endpoints."""
+    end = to_ or datetime.now(timezone.utc)
+    start = from_ or end.replace(hour=0, minute=0, second=0, microsecond=0)
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    return start, end
+
+
+def _csv_response(text: str, filename: str) -> Response:
+    return Response(
+        content=text,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _safe_filename(part: str) -> str:
+    cleaned = "".join(c if (c.isalnum() or c in "-_") else "_" for c in part)
+    return cleaned[:40] or "export"
+
+
+@router.get("/zones/dwell.csv")
+async def zones_dwell_csv(
+    from_: datetime | None = Query(None, alias="from"),
+    to_: datetime | None = Query(None, alias="to"),
+    window: int = Query(60, ge=5, le=600),
+    min_seconds: int = Query(0, ge=0),
+    current_user: User = Depends(RequirePermission(ANALYTICS_READ)),
+    db: Annotated[AsyncSession, Depends(get_db)] = ...,
+) -> Response:
+    """Download per-employee zone dwell for the day as CSV."""
+    start, end = _daily_range(from_, to_)
+    data = await get_zone_dwell(
+        db, tenant_id=current_user.tenant_id,
+        started_after=start, started_before=end,
+        active_window_sec=window, min_seconds=min_seconds,
+    )
+    return _csv_response(dwell_csv(data), f"zone-dwell-{start.date()}.csv")
+
+
+@router.get("/persons/{emp_id}/timeline.csv")
+async def person_timeline_csv(
+    emp_id: str,
+    from_: datetime | None = Query(None, alias="from"),
+    to_: datetime | None = Query(None, alias="to"),
+    window: int = Query(60, ge=5, le=600),
+    merge_gap: int = Query(60, ge=0, le=3600),
+    current_user: User = Depends(RequirePermission(ANALYTICS_READ)),
+    db: Annotated[AsyncSession, Depends(get_db)] = ...,
+) -> Response:
+    """Download one employee's zone-visit timeline for the day as CSV."""
+    start, end = _daily_range(from_, to_)
+    data = await get_person_timeline(
+        db, tenant_id=current_user.tenant_id, emp_id=emp_id,
+        started_after=start, started_before=end,
+        active_window_sec=window, merge_gap_seconds=merge_gap,
+    )
+    fname = f"timeline-{_safe_filename(emp_id)}-{start.date()}.csv"
+    return _csv_response(timeline_csv(data), fname)
 
 
 @router.get("/alerts/timeseries", response_model=TimeseriesResponse)

@@ -138,6 +138,44 @@ export function useZoneDwell(params?: {
   });
 }
 
+// ---- CSV export (authenticated blob download) ----------------------------- //
+
+function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function todayStamp(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** Download today's per-employee zone dwell as CSV. */
+export async function downloadDwellCsv(): Promise<void> {
+  const { data } = await api.get<Blob>('/analytics/zones/dwell.csv', {
+    responseType: 'blob',
+  });
+  triggerDownload(data, `zone-dwell-${todayStamp()}.csv`);
+}
+
+/** Download one employee's zone-visit timeline for today as CSV. */
+export async function downloadTimelineCsv(
+  empId: string,
+  name?: string | null,
+): Promise<void> {
+  const { data } = await api.get<Blob>(
+    `/analytics/persons/${encodeURIComponent(empId)}/timeline.csv`,
+    { responseType: 'blob' },
+  );
+  const who = (name || empId).replace(/[^\w-]+/g, '_').slice(0, 40);
+  triggerDownload(data, `timeline-${who}-${todayStamp()}.csv`);
+}
+
 // "Where was X today" — one employee's chronological zone-visit timeline.
 // Disabled until an employee is selected. Refreshes every 15s so an in-progress
 // visit keeps growing.

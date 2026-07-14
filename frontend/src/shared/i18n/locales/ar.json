@@ -8,6 +8,8 @@
     "save": "حفظ",
     "undo": "تراجع",
     "clear": "مسح",
+    "exportCsv": "تصدير CSV",
+    "exportFailed": "فشل التصدير",
     "cancel": "إلغاء",
     "back": "رجوع",
     "delete": "حذف",

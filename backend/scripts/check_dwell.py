@@ -21,6 +21,7 @@ from sqlalchemy import delete
 
 import app.core.models  # noqa: F401 -- registers every ORM model (relationships)
 from app.core.db import AsyncSessionLocal
+from app.modules.analytics.export import dwell_csv, timeline_csv
 from app.modules.analytics.service import get_person_timeline, get_zone_dwell
 from app.modules.cameras.models import Camera
 from app.modules.floor_plans.models import FloorPlan
@@ -199,6 +200,20 @@ async def main() -> None:
         )
         _assert(len(merged["segments"]) == 1, "merge_gap=1h collapses to one Sales visit")
         _assert(merged["segments"][0]["sessions"] == 2, "merged visit records 2 sessions")
+
+        # ---- CSV export smoke: format the real service output.
+        dcsv = dwell_csv(data)
+        tcsv = timeline_csv(tl)
+        print("\nCSV export:")
+        print("  dwell header:", dcsv.splitlines()[0])
+        _assert(dcsv.splitlines()[0].startswith("employee_id,employee_name,"),
+                "dwell CSV has the expected header")
+        _assert("Ali" in dcsv and "0:49:30" in dcsv, "dwell CSV contains Ali 0:49:30")
+        _assert(len(dcsv.splitlines()) == 3, "dwell CSV = header + 2 employees")
+        _assert(tcsv.splitlines()[0].startswith("employee_id,employee_name,sequence,"),
+                "timeline CSV has the expected header")
+        _assert(len(tcsv.splitlines()) == 3 and "Sales" in tcsv,
+                "timeline CSV = header + Ali's 2 Sales visits")
 
         # ---- Desk-level precision: ONE calibrated camera covering two desks.
         # A homography mapping 1000x1000 px -> 0..1 fractions; two people at
