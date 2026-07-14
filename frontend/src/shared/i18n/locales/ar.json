@@ -709,6 +709,16 @@
       "summary": "{{name}} — {{count}} زيارات، {{total}} في المناطق اليوم",
       "hereNow": "متواجد الآن",
       "now": "الآن"
+    },
+    "report": {
+      "title": "تقرير المناطق اليومي",
+      "generated": "أُنشئ في {{ts}}",
+      "print": "طباعة / حفظ PDF",
+      "printReport": "طباعة التقرير",
+      "summaryHeading": "الوقت في المناطق",
+      "movementHeading": "مخطط التنقل",
+      "total": "الإجمالي {{time}}",
+      "noData": "لا يوجد نشاط مناطق مسجَّل لهذا اليوم."
     }
   },
   "persons": {

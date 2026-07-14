@@ -709,6 +709,16 @@
       "summary": "{{name}} — {{count}} visits, {{total}} in zones today",
       "hereNow": "Here now",
       "now": "now"
+    },
+    "report": {
+      "title": "Daily Zone Report",
+      "generated": "generated {{ts}}",
+      "print": "Print / Save as PDF",
+      "printReport": "Print report",
+      "summaryHeading": "Time in zones",
+      "movementHeading": "Movement timeline",
+      "total": "Total {{time}}",
+      "noData": "No zone activity recorded for this day."
     }
   },
   "persons": {

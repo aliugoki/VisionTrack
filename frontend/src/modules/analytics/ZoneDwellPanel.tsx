@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { Timer, Download } from 'lucide-react';
+import { Timer, Download, Printer } from 'lucide-react';
 import { Badge } from '@/shared/components/Badge';
 import { Card } from '@/shared/components/Card';
 import { Spinner } from '@/shared/components/Spinner';
@@ -66,6 +66,14 @@ export function ZoneDwellPanel() {
             >
               <Download className="h-3.5 w-3.5" />
               {t('common.exportCsv')}
+            </button>
+            <button
+              type="button"
+              onClick={() => window.open('/reports/daily', '_blank', 'noopener')}
+              className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              {t('analytics.report.printReport')}
             </button>
           </div>
         )}

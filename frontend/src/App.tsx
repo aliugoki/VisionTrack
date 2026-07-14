@@ -17,6 +17,7 @@ import TenantSettingsPage from "@/modules/settings/TenantSettingsPage";
 import UsersListPage from "@/modules/users/UsersListPage";
 import RolesListPage from "@/modules/roles/RolesListPage";
 import AnalyticsPage from "@/modules/analytics/AnalyticsPage";
+import DailyReportPage from "@/modules/analytics/DailyReportPage";
 import PersonsPage from "@/modules/persons/PersonsPage";
 import PersonDetailPage from "@/modules/persons/PersonDetailPage";
 import BEVTrackingPage from "@/modules/bev/BEVTrackingPage";
@@ -53,6 +54,8 @@ export default function App() {
       </Route>
 
       <Route element={<ProtectedRoute />}>
+        {/* Bare, chrome-less route for the print-friendly PDF report. */}
+        <Route path="reports/daily" element={<DailyReportPage />} />
         <Route element={<AppLayout />}>
           <Route index element={<DashboardPage />} />
           <Route path="live" element={<LiveWallPage />} />
