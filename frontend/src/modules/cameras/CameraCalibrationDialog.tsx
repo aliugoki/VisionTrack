@@ -11,8 +11,10 @@ import { useUpdateCamera } from '@/modules/cameras/api';
 import {
   solveHomography,
   projectPoint,
+  footPoint,
   type StoredCalibration,
 } from '@/modules/bev/homography';
+import { getLatestFrame } from '@/modules/tracks/useTrackEvents';
 import type { Camera } from '@/shared/types/api';
 import type { FloorPlan } from '@/modules/floor-plan/types';
 
@@ -218,6 +220,60 @@ function Marker({
   );
 }
 
+// ---- Live projection preview ---------------------------------------------- //
+
+/**
+ * Project live-tracked people's foot-points through the in-progress homography
+ * onto the floor plan. This mirrors ingest exactly (both apply the homography to
+ * raw source-pixel bboxes — ``tracks.consumer._project_foot``), so the dots land
+ * where the analytics will place people: if a calibration is good they sit where
+ * the people really are. Polls the shared track buffer ~2.5x/s (mounted app-wide
+ * by ``useTrackEventStream``); no dots when there is no homography yet.
+ */
+function useLiveProjections(cameraId: string, H: number[] | null) {
+  const [dots, setDots] = useState<{ key: string; x: number; y: number }[]>([]);
+  useEffect(() => {
+    if (!H) {
+      setDots([]);
+      return;
+    }
+    const tick = () => {
+      const frame = getLatestFrame(cameraId);
+      if (!frame) {
+        setDots([]);
+        return;
+      }
+      const out: { key: string; x: number; y: number }[] = [];
+      for (const tr of frame.tracks) {
+        const [fx, fy] = footPoint(tr.bbox);
+        const p = projectPoint(H, fx, fy);
+        if (p && p[0] >= 0 && p[0] <= 1 && p[1] >= 0 && p[1] <= 1) {
+          out.push({ key: String(tr.track_id), x: p[0], y: p[1] });
+        }
+      }
+      setDots(out);
+    };
+    tick();
+    const id = window.setInterval(tick, 400);
+    return () => window.clearInterval(id);
+  }, [cameraId, H]);
+  return dots;
+}
+
+function PreviewDot({ xPct, yPct, scale = 1 }: { xPct: number; yPct: number; scale?: number }) {
+  return (
+    <span
+      className="pointer-events-none absolute h-3.5 w-3.5 rounded-full bg-emerald-500 ring-2 ring-white"
+      style={{
+        left: `${xPct}%`,
+        top: `${yPct}%`,
+        transform: `translate(-50%, -50%) scale(${1 / scale})`,
+        boxShadow: '0 0 0 4px rgba(16,185,129,0.35)',
+      }}
+    />
+  );
+}
+
 // ---- Main dialog ---------------------------------------------------------- //
 
 export function CameraCalibrationDialog({
@@ -244,6 +300,7 @@ export function CameraCalibrationDialog({
   const [pairs, setPairs] = useState<Pair[]>([]);
   const [draftSrc, setDraftSrc] = useState<Pt | null>(null);
   const [imageRef, setImageRef] = useState<{ width: number; height: number } | null>(null);
+  const [showPreview, setShowPreview] = useState(true);
 
   // Reset when reopened for a different camera / when candidates load.
   useEffect(() => {
@@ -293,6 +350,12 @@ export function CameraCalibrationDialog({
     }
     return { ok: true, meanPct: (sum / pairs.length) * 100, maxPct: max * 100, H };
   }, [pairs]);
+
+  // Live people projected through the in-progress homography onto the floor plan.
+  const projections = useLiveProjections(
+    camera.id,
+    showPreview && quality?.ok ? quality.H : null,
+  );
 
   async function save() {
     if (!plan || !imageRef) return;
@@ -416,9 +479,27 @@ export function CameraCalibrationDialog({
               />
             </div>
             <div className="flex h-[55vh] flex-col gap-2">
-              <span className="text-xs font-semibold text-muted-foreground">
-                {t('cameras.calibration.floorPlan')}
-              </span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-muted-foreground">
+                  {t('cameras.calibration.floorPlan')}
+                </span>
+                {quality?.ok && (
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={showPreview}
+                      onChange={(e) => setShowPreview(e.target.checked)}
+                    />
+                    <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                    {t('cameras.calibration.livePreview')}
+                    {showPreview && (
+                      <span className="font-medium text-emerald-600">
+                        {t('cameras.calibration.peopleProjected', { n: projections.length })}
+                      </span>
+                    )}
+                  </label>
+                )}
+              </div>
               <div className="relative flex-1 overflow-hidden rounded-md border border-border">
                 {plan && (
                   <FloorPlanViewer plan={plan} onPlaneClick={onFloorClick} showControls>
@@ -434,6 +515,15 @@ export function CameraCalibrationDialog({
                             scale={currentScale}
                           />
                         ))}
+                        {showPreview &&
+                          projections.map((d) => (
+                            <PreviewDot
+                              key={d.key}
+                              xPct={d.x * 100}
+                              yPct={d.y * 100}
+                              scale={currentScale}
+                            />
+                          ))}
                       </>
                     )}
                   </FloorPlanViewer>

@@ -101,6 +101,8 @@
       "saveFailed": "Couldn't save the calibration.",
       "degenerate": "Points are collinear or too close — spread them out.",
       "alreadyCalibrated": "Already calibrated",
+      "livePreview": "Live preview",
+      "peopleProjected": "· {{n}} live",
       "noPlan": "Place this camera on a floor plan first (Floor Plans → drop a camera marker), then come back to calibrate."
     },
     "deleteTitle": "Delete camera",
