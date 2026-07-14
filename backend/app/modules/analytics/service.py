@@ -32,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.alerts.models import Alert
 from app.modules.analytics.attendance import attendance_from_dwell
+from app.modules.analytics.zone_report import zone_rollup_from_dwell
 from app.modules.analytics.dwell import (
     accumulate_dwell,
     build_person_timeline,
@@ -654,6 +655,33 @@ async def get_attendance(
         "from": dwell["from"],
         "to": dwell["to"],
         "rows": attendance_from_dwell(dwell["rows"]),
+    }
+
+
+async def get_zone_rollup(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    started_after: datetime,
+    started_before: datetime,
+    active_window_sec: int = 60,
+    min_seconds: int = 0,
+    emp_id: str | None = None,
+    zone_id: str | None = None,
+) -> dict:
+    """Per-zone rollup (total person-time, distinct people, avg, present) over the
+    window. Rolls up ``get_zone_dwell`` so it honours the same filters."""
+    dwell = await get_zone_dwell(
+        db, tenant_id=tenant_id,
+        started_after=started_after, started_before=started_before,
+        active_window_sec=active_window_sec, min_seconds=min_seconds,
+        emp_id=emp_id, zone_id=zone_id,
+    )
+    return {
+        "as_of": dwell["as_of"],
+        "from": dwell["from"],
+        "to": dwell["to"],
+        "rows": zone_rollup_from_dwell(dwell["rows"]),
     }
 
 

@@ -10,6 +10,7 @@ import type {
   TimeseriesResponse,
   ZoneDwellResponse,
   ZoneOccupancyResponse,
+  ZoneRollupResponse,
 } from '@/modules/analytics/types';
 
 export const ANALYTICS_KEYS = {
@@ -232,6 +233,48 @@ export async function downloadAttendanceCsv(filters: DwellFilters = {}): Promise
     },
   });
   triggerDownload(data, `attendance-${todayStamp()}.csv`);
+}
+
+/** Per-zone rollup (total person-time, distinct people, avg, present). */
+export function useZoneRollup(filters: DwellFilters = {}) {
+  return useQuery({
+    queryKey: [
+      'analytics',
+      'zone-rollup',
+      filters.from ?? null,
+      filters.to ?? null,
+      filters.minSeconds ?? 0,
+      filters.empId ?? null,
+      filters.zoneId ?? null,
+    ] as const,
+    queryFn: async () => {
+      const { data } = await api.get<ZoneRollupResponse>('/analytics/zones/rollup', {
+        params: {
+          from: filters.from,
+          to: filters.to,
+          min_seconds: filters.minSeconds,
+          emp_id: filters.empId,
+          zone_id: filters.zoneId,
+        },
+      });
+      return data;
+    },
+  });
+}
+
+/** Download the per-zone rollup as CSV, honouring the given filters. */
+export async function downloadZoneRollupCsv(filters: DwellFilters = {}): Promise<void> {
+  const { data } = await api.get<Blob>('/analytics/zones/rollup.csv', {
+    responseType: 'blob',
+    params: {
+      from: filters.from,
+      to: filters.to,
+      min_seconds: filters.minSeconds,
+      emp_id: filters.empId,
+      zone_id: filters.zoneId,
+    },
+  });
+  triggerDownload(data, `zone-rollup-${todayStamp()}.csv`);
 }
 
 // "Where was X today" — one employee's chronological zone-visit timeline.

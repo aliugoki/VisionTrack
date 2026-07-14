@@ -134,3 +134,21 @@ export interface AttendanceResponse {
   to: string;
   rows: AttendanceRow[];
 }
+
+export interface ZoneRollupRow {
+  zone_id: string;
+  zone_name: string;
+  floor_plan_id: string | null;
+  floor_plan_name: string | null;
+  total_seconds: number;
+  people_count: number;
+  avg_seconds: number;
+  present_count: number;
+}
+
+export interface ZoneRollupResponse {
+  as_of: string;
+  from: string;
+  to: string;
+  rows: ZoneRollupRow[];
+}

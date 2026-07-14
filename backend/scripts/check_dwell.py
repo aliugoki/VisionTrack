@@ -26,6 +26,7 @@ from app.modules.analytics.service import (
     get_attendance,
     get_person_timeline,
     get_zone_dwell,
+    get_zone_rollup,
 )
 from app.modules.cameras.models import Camera
 from app.modules.floor_plans.models import FloorPlan
@@ -254,6 +255,22 @@ async def main() -> None:
         _assert(amap["E1"]["present"] is True, "Ali present")
         _assert(amap["E2"]["tracked_seconds"] == 2400 and amap["E2"]["present"] is False,
                 "Sara tracked=2400s, not present")
+
+        # ---- Zone rollup (total person-time, distinct people, avg, present).
+        roll = await get_zone_rollup(
+            db, tenant_id=tenant.id,
+            started_after=now - timedelta(hours=3), started_before=now + timedelta(hours=1))
+        rmap = {z["zone_name"]: z for z in roll["rows"]}
+        print("\nZone rollup:")
+        for z in roll["rows"]:
+            print(f"  {z['zone_name']:<12} total={int(z['total_seconds'])//60}m "
+                  f"people={z['people_count']} present={z['present_count']}")
+        _assert([z["zone_name"] for z in roll["rows"]] == ["Sales", "Production"],
+                "zone rollup busiest-first (Sales 2970 > Production 2400)")
+        _assert(rmap["Sales"]["people_count"] == 1 and rmap["Sales"]["present_count"] == 1,
+                "Sales: 1 person, 1 present")
+        _assert(rmap["Production"]["total_seconds"] == 2400 and rmap["Production"]["present_count"] == 0,
+                "Production: 2400s, 0 present")
 
         # ---- Desk-level precision: ONE calibrated camera covering two desks.
         # A homography mapping 1000x1000 px -> 0..1 fractions; two people at

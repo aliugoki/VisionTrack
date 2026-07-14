@@ -76,6 +76,26 @@ def attendance_csv(data: dict) -> str:
     return buf.getvalue()
 
 
+def zone_rollup_csv(data: dict) -> str:
+    """CSV of ``get_zone_rollup`` output: one row per zone."""
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow([
+        "zone_id", "zone", "floor_plan", "total_seconds", "total",
+        "people", "avg_seconds", "avg", "present",
+    ])
+    for r in data.get("rows", []):
+        w.writerow([
+            _safe(r.get("zone_id")), _safe(r.get("zone_name")),
+            _safe(r.get("floor_plan_name")),
+            int(round(r.get("total_seconds", 0))), _hms(r.get("total_seconds", 0)),
+            r.get("people_count", 0),
+            int(round(r.get("avg_seconds", 0))), _hms(r.get("avg_seconds", 0)),
+            r.get("present_count", 0),
+        ])
+    return buf.getvalue()
+
+
 def timeline_csv(data: dict) -> str:
     """CSV of ``get_person_timeline`` output: one row per zone visit, in order."""
     buf = io.StringIO()

@@ -7,9 +7,11 @@ import { Spinner } from '@/shared/components/Spinner';
 import {
   useZoneDwell,
   useAttendance,
+  useZoneRollup,
   usePersonTimeline,
   downloadDwellCsv,
   downloadAttendanceCsv,
+  downloadZoneRollupCsv,
 } from '@/modules/analytics/api';
 
 /**
@@ -120,6 +122,8 @@ export default function DailyReportPage() {
   };
   const { data: att } = useAttendance(attFilters);
   const attRows = att?.rows ?? [];
+  const { data: rollup } = useZoneRollup(attFilters);
+  const rollupRows = rollup?.rows ?? [];
 
   function setFilter(key: string, value: string) {
     const next = new URLSearchParams(params);
@@ -213,6 +217,16 @@ export default function DailyReportPage() {
           >
             <Download className="h-4 w-4" />
             {t('analytics.report.attendanceCsv')}
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              downloadZoneRollupCsv(attFilters).catch(() => toast.error(t('common.exportFailed')))
+            }
+            className="flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+          >
+            <Download className="h-4 w-4" />
+            {t('analytics.report.zoneCsv')}
           </button>
           <button
             type="button"
@@ -399,6 +413,39 @@ export default function DailyReportPage() {
               </tbody>
             </table>
           </section>
+
+          {rollupRows.length > 0 && (
+            <section className="mb-8">
+              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
+                {t('analytics.report.zoneHeading')}
+              </h2>
+              <table className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="border-b-2 border-gray-400 text-left">
+                    <th className="py-1.5 pr-3 font-semibold">{t('analytics.dwell.zone')}</th>
+                    <th className="py-1.5 pr-3 text-right font-semibold">{t('analytics.report.people')}</th>
+                    <th className="py-1.5 pr-3 text-right font-semibold">{t('analytics.report.totalTime')}</th>
+                    <th className="py-1.5 pr-3 text-right font-semibold">{t('analytics.report.avgPerson')}</th>
+                    <th className="py-1.5 text-right font-semibold">{t('analytics.dwell.hereNow')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rollupRows.map((z) => (
+                    <tr key={z.zone_id} className="break-inside-avoid border-b border-gray-200">
+                      <td className="py-1.5 pr-3">
+                        {z.zone_name}
+                        {z.floor_plan_name && <span className="text-gray-500"> · {z.floor_plan_name}</span>}
+                      </td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums">{z.people_count}</td>
+                      <td className="py-1.5 pr-3 text-right font-medium tabular-nums">{fmtDuration(z.total_seconds)}</td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums">{fmtDuration(z.avg_seconds)}</td>
+                      <td className="py-1.5 text-right tabular-nums">{z.present_count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
 
           <section>
             <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">

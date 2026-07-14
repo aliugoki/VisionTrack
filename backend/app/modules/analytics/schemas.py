@@ -181,3 +181,24 @@ class AttendanceResponse(BaseModel):
     rows: list[AttendanceRow]
 
     model_config = {"populate_by_name": True}
+
+
+class ZoneRollupRow(BaseModel):
+    """Per-zone rollup over the window."""
+    zone_id: str
+    zone_name: str
+    floor_plan_id: str | None = None
+    floor_plan_name: str | None = None
+    total_seconds: float
+    people_count: int
+    avg_seconds: float
+    present_count: int
+
+
+class ZoneRollupResponse(BaseModel):
+    as_of: datetime
+    from_: datetime = Field(alias="from")
+    to: datetime
+    rows: list[ZoneRollupRow]
+
+    model_config = {"populate_by_name": True}

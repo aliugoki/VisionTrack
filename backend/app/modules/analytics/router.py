@@ -25,7 +25,12 @@ from app.core.db import get_db
 from app.core.deps import RequirePermission
 from app.core.permissions import ANALYTICS_READ
 from app.modules.analytics import service
-from app.modules.analytics.export import attendance_csv, dwell_csv, timeline_csv
+from app.modules.analytics.export import (
+    attendance_csv,
+    dwell_csv,
+    timeline_csv,
+    zone_rollup_csv,
+)
 from app.modules.analytics.schemas import (
     AlertsBreakdownResponse,
     AttendanceResponse,
@@ -35,6 +40,7 @@ from app.modules.analytics.schemas import (
     TimeseriesResponse,
     ZoneDwellResponse,
     ZoneOccupancyResponse,
+    ZoneRollupResponse,
 )
 from app.modules.analytics.service import (
     get_alerts_breakdown,
@@ -45,6 +51,7 @@ from app.modules.analytics.service import (
     get_person_timeline,
     get_zone_dwell,
     get_zone_occupancy,
+    get_zone_rollup,
 )
 from app.modules.users.models import User
 
@@ -232,6 +239,50 @@ async def zones_dwell_csv(
         emp_id=emp_id, zone_id=zone_id,
     )
     return _csv_response(dwell_csv(data), f"zone-dwell-{start.date()}.csv")
+
+
+@router.get("/zones/rollup", response_model=ZoneRollupResponse)
+async def zones_rollup_endpoint(
+    from_: datetime | None = Query(None, alias="from"),
+    to_: datetime | None = Query(None, alias="to"),
+    window: int = Query(60, ge=5, le=600),
+    min_seconds: int = Query(0, ge=0),
+    emp_id: str | None = Query(None),
+    zone_id: str | None = Query(None),
+    current_user: User = Depends(RequirePermission(ANALYTICS_READ)),
+    db: Annotated[AsyncSession, Depends(get_db)] = ...,
+) -> ZoneRollupResponse:
+    """Per-zone rollup: total person-time, distinct people, avg, present."""
+    start, end = _daily_range(from_, to_)
+    data = await get_zone_rollup(
+        db, tenant_id=current_user.tenant_id,
+        started_after=start, started_before=end,
+        active_window_sec=window, min_seconds=min_seconds,
+        emp_id=emp_id, zone_id=zone_id,
+    )
+    return ZoneRollupResponse(**data)
+
+
+@router.get("/zones/rollup.csv")
+async def zones_rollup_csv(
+    from_: datetime | None = Query(None, alias="from"),
+    to_: datetime | None = Query(None, alias="to"),
+    window: int = Query(60, ge=5, le=600),
+    min_seconds: int = Query(0, ge=0),
+    emp_id: str | None = Query(None),
+    zone_id: str | None = Query(None),
+    current_user: User = Depends(RequirePermission(ANALYTICS_READ)),
+    db: Annotated[AsyncSession, Depends(get_db)] = ...,
+) -> Response:
+    """Download the per-zone rollup as CSV."""
+    start, end = _daily_range(from_, to_)
+    data = await get_zone_rollup(
+        db, tenant_id=current_user.tenant_id,
+        started_after=start, started_before=end,
+        active_window_sec=window, min_seconds=min_seconds,
+        emp_id=emp_id, zone_id=zone_id,
+    )
+    return _csv_response(zone_rollup_csv(data), f"zone-rollup-{start.date()}.csv")
 
 
 @router.get("/attendance", response_model=AttendanceResponse)
