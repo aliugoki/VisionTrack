@@ -94,3 +94,25 @@ export interface ZoneDwellResponse {
   active_window_sec: number;
   rows: ZoneDwellRow[];
 }
+
+export interface TimelineSegment {
+  zone_id: string;
+  zone_name: string;
+  floor_plan_id: string;
+  floor_plan_name: string | null;
+  start: string; // ISO datetime
+  end: string; // ISO datetime
+  seconds: number;
+  sessions: number;
+  present: boolean;
+}
+
+export interface PersonTimelineResponse {
+  emp_id: string;
+  name: string | null;
+  as_of: string;
+  from: string;
+  to: string;
+  total_seconds: number;
+  segments: TimelineSegment[];
+}

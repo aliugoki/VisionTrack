@@ -21,7 +21,7 @@ from sqlalchemy import delete
 
 import app.core.models  # noqa: F401 -- registers every ORM model (relationships)
 from app.core.db import AsyncSessionLocal
-from app.modules.analytics.service import get_zone_dwell
+from app.modules.analytics.service import get_person_timeline, get_zone_dwell
 from app.modules.cameras.models import Camera
 from app.modules.floor_plans.models import FloorPlan
 from app.modules.persons.models import PersonIdentity
@@ -169,6 +169,36 @@ async def main() -> None:
         _assert(cby[("E1", "Sales")]["seconds"] == 20 * 60, "clipped: Ali Sales = 20m (10m + 10m, both truncated)")
         _assert(cby[("E1", "Sales")]["sessions"] == 2, "clipped: Ali has 2 sessions in window")
         _assert(cby[("E2", "Production")]["seconds"] == 35 * 60, "clipped: Sara truncated to 35m")
+
+        # ---- "Where was Ali today" timeline. Ali has two Sales tracks 40m apart
+        # (T1 90..60m ago, T2 20m ago..open) -> two visits at the default 60s gap.
+        wide_from = now - timedelta(hours=3)
+        wide_to = now + timedelta(hours=1)
+        tl = await get_person_timeline(
+            db, tenant_id=tenant.id, emp_id="E1",
+            started_after=wide_from, started_before=wide_to,
+        )
+        print("\nAli timeline:")
+        for s in tl["segments"]:
+            print(f"  {s['zone_name']:<10} {int(s['seconds'])//60}m present={s['present']}")
+        _assert(tl["name"] == "Ali", "timeline resolves the employee name")
+        _assert([s["zone_name"] for s in tl["segments"]] == ["Sales", "Sales"],
+                "Ali's day = two Sales visits (40m apart, not merged)")
+        _assert(tl["segments"][0]["seconds"] == 30 * 60, "first Sales visit = 30m")
+        _assert(tl["segments"][0]["present"] is False, "first visit not present")
+        _assert(tl["segments"][1]["present"] is True, "second (open) visit is present")
+        _assert(tl["segments"][0]["start"] < tl["segments"][1]["start"],
+                "timeline is chronological")
+
+        # With a 60-min merge tolerance the 40m gap closes -> one visit spanning
+        # 90m..~now, sessions=2.
+        merged = await get_person_timeline(
+            db, tenant_id=tenant.id, emp_id="E1",
+            started_after=wide_from, started_before=wide_to,
+            merge_gap_seconds=3600,
+        )
+        _assert(len(merged["segments"]) == 1, "merge_gap=1h collapses to one Sales visit")
+        _assert(merged["segments"][0]["sessions"] == 2, "merged visit records 2 sessions")
 
         # Cleanup so a shared DB stays tidy (throwaway DBs don't need this).
         await db.execute(delete(PersonIdentity).where(PersonIdentity.tenant_id == tenant.id))

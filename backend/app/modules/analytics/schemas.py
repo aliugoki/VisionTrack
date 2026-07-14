@@ -125,3 +125,33 @@ class ZoneDwellResponse(BaseModel):
     rows: list[ZoneDwellRow]
 
     model_config = {"populate_by_name": True}
+
+
+class TimelineSegment(BaseModel):
+    """One zone visit in an employee's day — a contiguous stay in a zone.
+
+    ``sessions`` counts the track fragments merged into this visit; ``present``
+    is true if the person is still in the zone right now.
+    """
+    zone_id: str
+    zone_name: str
+    floor_plan_id: str
+    floor_plan_name: str | None = None
+    start: datetime
+    end: datetime
+    seconds: float
+    sessions: int
+    present: bool
+
+
+class PersonTimelineResponse(BaseModel):
+    """"Where was this employee today" — their zone visits in chronological order."""
+    emp_id: str
+    name: str | None = None
+    as_of: datetime
+    from_: datetime = Field(alias="from")
+    to: datetime
+    total_seconds: float
+    segments: list[TimelineSegment]
+
+    model_config = {"populate_by_name": True}

@@ -29,6 +29,7 @@ from app.modules.analytics.schemas import (
     AlertsBreakdownResponse,
     OverviewKPIs,
     PersonsSummary,
+    PersonTimelineResponse,
     TimeseriesResponse,
     ZoneDwellResponse,
     ZoneOccupancyResponse,
@@ -38,6 +39,7 @@ from app.modules.analytics.service import (
     get_alerts_timeseries,
     get_overview,
     get_people_timeseries,
+    get_person_timeline,
     get_zone_dwell,
     get_zone_occupancy,
 )
@@ -135,6 +137,44 @@ async def zones_dwell_endpoint(
         min_seconds=min_seconds,
     )
     return ZoneDwellResponse(**data)
+
+
+@router.get("/persons/{emp_id}/timeline", response_model=PersonTimelineResponse)
+async def person_timeline_endpoint(
+    emp_id: str,
+    from_: datetime | None = Query(None, alias="from"),
+    to_: datetime | None = Query(None, alias="to"),
+    window: int = Query(
+        60, ge=5, le=600,
+        description="seconds; a visit is 'here now' if the person was seen within this",
+    ),
+    merge_gap: int = Query(
+        60, ge=0, le=3600,
+        description="seconds; same-zone fragments closer than this merge into one visit",
+    ),
+    current_user: User = Depends(RequirePermission(ANALYTICS_READ)),
+    db: Annotated[AsyncSession, Depends(get_db)] = ...,
+) -> PersonTimelineResponse:
+    """Where was this employee today — their zone visits in chronological order.
+
+    Defaults to today (start of the current UTC day -> now).
+    """
+    end = to_ or datetime.now(timezone.utc)
+    start = from_ or end.replace(hour=0, minute=0, second=0, microsecond=0)
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    data = await get_person_timeline(
+        db,
+        tenant_id=current_user.tenant_id,
+        emp_id=emp_id,
+        started_after=start,
+        started_before=end,
+        active_window_sec=window,
+        merge_gap_seconds=merge_gap,
+    )
+    return PersonTimelineResponse(**data)
 
 
 @router.get("/alerts/timeseries", response_model=TimeseriesResponse)

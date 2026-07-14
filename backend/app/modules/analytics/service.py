@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.alerts.models import Alert
 from app.modules.analytics.dwell import (
     accumulate_dwell,
+    build_person_timeline,
     camera_zone_index,
     clip_interval,
 )
@@ -509,4 +510,88 @@ async def get_zone_dwell(
         "to": started_before,
         "active_window_sec": active_window_sec,
         "rows": dwell_rows,
+    }
+
+
+async def get_person_timeline(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    emp_id: str,
+    started_after: datetime,
+    started_before: datetime,
+    active_window_sec: int = 60,
+    merge_gap_seconds: float = 60.0,
+) -> dict:
+    """"Where was this employee today" — a chronological zone-visit timeline.
+
+    Same track->identity->zone pipeline as ``get_zone_dwell``, but for a single
+    employee: each of their tracks becomes a per-zone presence segment (clipped
+    to the window), then ``build_person_timeline`` merges same-zone fragments
+    into visits and orders them by time. ``total_seconds`` sums the visits (note:
+    if two cameras' zones overlap it can exceed wall-clock — it is time-in-zone,
+    not a wall-clock union).
+    """
+    now = datetime.now(UTC)
+    active_cutoff = now - timedelta(seconds=active_window_sec)
+
+    rows = (await db.execute(
+        select(
+            Track.id, Track.camera_id, Track.person_id,
+            Track.started_at, Track.ended_at, Track.updated_at,
+        ).where(
+            Track.tenant_id == tenant_id,
+            Track.started_at < started_before,
+            or_(Track.ended_at.is_(None), Track.ended_at >= started_after),
+        )
+    )).all()
+
+    track_ids = [r.id for r in rows]
+    person_ids = [r.person_id for r in rows if r.person_id is not None]
+    best_by_track, best_by_person = await _best_identity_by_track(
+        db, tenant_id=tenant_id, track_ids=track_ids, person_ids=person_ids
+    )
+
+    # Camera -> zones (same binding as dwell/occupancy).
+    fps = [
+        {"id": r.id, "name": r.name, "zones": r.zones, "markers": r.markers}
+        for r in (await db.execute(
+            select(FloorPlan.id, FloorPlan.name, FloorPlan.zones, FloorPlan.markers)
+            .where(FloorPlan.tenant_id == tenant_id)
+        )).all()
+    ]
+    cam_zones = camera_zone_index(fps)
+
+    name: str | None = None
+    segments: list[dict] = []
+    for r in rows:
+        ident = best_by_track.get(r.id) or (
+            best_by_person.get(r.person_id) if r.person_id is not None else None)
+        if not ident or ident[0] != emp_id:
+            continue  # not this employee
+        if ident[1]:
+            name = ident[1]
+        raw_end = r.ended_at if r.ended_at is not None else r.updated_at
+        clipped = clip_interval(r.started_at, raw_end, started_after, started_before)
+        if clipped is None:
+            continue
+        present = r.ended_at is None and r.updated_at >= active_cutoff
+        for ref in cam_zones.get(str(r.camera_id), []):
+            segments.append({
+                "zone_id": ref["zone_id"],
+                "zone_name": ref["zone_name"],
+                "floor_plan_id": ref["floor_plan_id"],
+                "floor_plan_name": ref["floor_plan_name"],
+                "start": clipped[0], "end": clipped[1], "present": present,
+            })
+
+    visits = build_person_timeline(segments, merge_gap_seconds=merge_gap_seconds)
+    return {
+        "emp_id": emp_id,
+        "name": name,
+        "as_of": now,
+        "from": started_after,
+        "to": started_before,
+        "total_seconds": sum(v["seconds"] for v in visits),
+        "segments": visits,
     }

@@ -5,6 +5,7 @@ import type {
   DateRange,
   PersonsSummary,
   OverviewKPIs,
+  PersonTimelineResponse,
   TimeseriesResponse,
   ZoneDwellResponse,
   ZoneOccupancyResponse,
@@ -132,6 +133,40 @@ export function useZoneDwell(params?: {
           min_seconds: params?.minSeconds,
         },
       });
+      return data;
+    },
+  });
+}
+
+// "Where was X today" — one employee's chronological zone-visit timeline.
+// Disabled until an employee is selected. Refreshes every 15s so an in-progress
+// visit keeps growing.
+export function usePersonTimeline(
+  empId: string | null,
+  params?: { from?: string; to?: string; mergeGap?: number },
+) {
+  return useQuery({
+    queryKey: [
+      'analytics',
+      'person-timeline',
+      empId,
+      params?.from ?? null,
+      params?.to ?? null,
+      params?.mergeGap ?? 60,
+    ] as const,
+    enabled: !!empId,
+    refetchInterval: 15_000,
+    queryFn: async () => {
+      const { data } = await api.get<PersonTimelineResponse>(
+        `/analytics/persons/${encodeURIComponent(empId as string)}/timeline`,
+        {
+          params: {
+            from: params?.from,
+            to: params?.to,
+            merge_gap: params?.mergeGap,
+          },
+        },
+      );
       return data;
     },
   });

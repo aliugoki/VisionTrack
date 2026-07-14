@@ -671,6 +671,15 @@
       "leftAt": "Left {{time}}",
       "peopleCount": "{{n}} people",
       "hereNowCount": "{{n}} here now"
+    },
+    "timeline": {
+      "heading": "Where was… today",
+      "employee": "Employee",
+      "empty": "No employees seen in any zone yet today.",
+      "noVisits": "No zone visits recorded for this employee today.",
+      "summary": "{{name}} — {{count}} visits, {{total}} in zones today",
+      "hereNow": "Here now",
+      "now": "now"
     }
   },
   "persons": {

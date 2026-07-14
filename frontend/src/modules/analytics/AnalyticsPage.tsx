@@ -19,6 +19,7 @@ import { KpiCard } from '@/modules/analytics/KpiCard';
 import { PeopleTimeseriesChart } from '@/modules/analytics/PeopleTimeseriesChart';
 import { ZoneOccupancyPanel } from '@/modules/analytics/ZoneOccupancyPanel';
 import { ZoneDwellPanel } from '@/modules/analytics/ZoneDwellPanel';
+import { PersonTimelinePanel } from '@/modules/analytics/PersonTimelinePanel';
 import { useOverview, usePersonsSummary } from '@/modules/analytics/api';
 import type { DateRange } from '@/modules/analytics/types';
 
@@ -126,6 +127,9 @@ export default function AnalyticsPage() {
 
       {/* Per-person zone dwell — indoor geofencing (who is where, and how long) */}
       <ZoneDwellPanel />
+
+      {/* Where was X today — one employee's chronological zone journey */}
+      <PersonTimelinePanel />
 
       {/* Timeseries row */}
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">

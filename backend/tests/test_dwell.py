@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.modules.analytics.dwell import (
     accumulate_dwell,
+    build_person_timeline,
     camera_zone_index,
     clip_interval,
 )
@@ -137,3 +138,70 @@ def test_accumulate_multi_zone_and_sort_order():
         ("E2", "Production", 45 * 60),
         ("E1", "Sales", 10 * 60),
     ]
+
+
+# --------------------------------------------------------------------------- #
+# build_person_timeline — "where was X today"
+# --------------------------------------------------------------------------- #
+
+def _seg(zone_id, zone_name, start_off, end_off, present=False):
+    return {
+        "zone_id": zone_id, "zone_name": zone_name,
+        "floor_plan_id": "fp1", "floor_plan_name": "Ground Floor",
+        "start": T0 + timedelta(minutes=start_off),
+        "end": T0 + timedelta(minutes=end_off),
+        "present": present,
+    }
+
+
+def test_timeline_orders_chronologically_across_zones():
+    # Sales 0-45, Production 45-90, Sales 90-120 -> three visits, Sales twice.
+    tl = build_person_timeline([
+        _seg("zR", "Production", 45, 90),
+        _seg("zL", "Sales", 0, 45),
+        _seg("zL", "Sales", 90, 120, present=True),
+    ])
+    assert [(v["zone_name"], v["seconds"], v["present"]) for v in tl] == [
+        ("Sales", 45 * 60, False),
+        ("Production", 45 * 60, False),
+        ("Sales", 30 * 60, True),
+    ]
+
+
+def test_timeline_merges_same_zone_fragments_within_gap():
+    # Two Sales fragments 30s apart (tracker drop) merge into one visit.
+    tl = build_person_timeline([
+        _seg("zL", "Sales", 0, 10),
+        _seg("zL", "Sales", 10.5, 20),   # 30s gap
+    ], merge_gap_seconds=60)
+    assert len(tl) == 1
+    assert tl[0]["seconds"] == 20 * 60
+    assert tl[0]["sessions"] == 2
+
+
+def test_timeline_keeps_same_zone_return_as_separate_visit():
+    # Left Sales for 40 min then came back -> two Sales visits (gap > tolerance).
+    tl = build_person_timeline([
+        _seg("zL", "Sales", 0, 20),
+        _seg("zL", "Sales", 60, 75),
+    ], merge_gap_seconds=60)
+    assert [(v["zone_name"], v["seconds"]) for v in tl] == [
+        ("Sales", 20 * 60),
+        ("Sales", 15 * 60),
+    ]
+
+
+def test_timeline_merges_overlapping_fragments():
+    # Overlapping tracks (two cameras, same zone) merge to the union span.
+    tl = build_person_timeline([
+        _seg("zL", "Sales", 0, 30),
+        _seg("zL", "Sales", 20, 45),
+    ])
+    assert len(tl) == 1
+    assert tl[0]["start"] == T0
+    assert tl[0]["end"] == T0 + timedelta(minutes=45)
+    assert tl[0]["seconds"] == 45 * 60
+
+
+def test_timeline_empty():
+    assert build_person_timeline([]) == []

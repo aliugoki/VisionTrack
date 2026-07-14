@@ -28,7 +28,7 @@ approximation occupancy makes, stated plainly rather than hidden.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Iterable
 
 from app.modules.floor_plans.zones_math import point_in_polygon
@@ -139,3 +139,59 @@ def accumulate_dwell(
                 row["name"] = t["name"]
 
     return sorted(agg.values(), key=lambda r: r["seconds"], reverse=True)
+
+
+def build_person_timeline(
+    segments: Iterable[dict[str, Any]],
+    merge_gap_seconds: float = 60.0,
+) -> list[dict[str, Any]]:
+    """Collapse one person's per-zone presence segments into a chronological
+    "where were they" visit list — the timeline behind "where was X today".
+
+    Each input segment: ``{"zone_id", "zone_name", "floor_plan_id",
+    "floor_plan_name", "start": datetime, "end": datetime, "present": bool}`` —
+    one per (track, zone), already clipped to the query window.
+
+    Two segments in the **same zone** are merged into one visit when the later
+    one starts within ``merge_gap_seconds`` of the running visit's end. This
+    bridges brief tracker drops / camera hand-offs so a continuous stay reads as
+    one visit rather than a dozen fragments, while a genuine departure and return
+    to the same zone (a gap larger than the tolerance) stays two visits.
+
+    Merging is per-zone, so moving Sales -> Production -> Sales yields three
+    visits (Sales appears twice). Returns visits sorted by ``start``; each carries
+    ``seconds`` (end-start), ``sessions`` (fragments merged), and ``present``.
+    """
+    by_zone: dict[str, list[dict[str, Any]]] = {}
+    for s in segments:
+        by_zone.setdefault(s["zone_id"], []).append(s)
+
+    visits: list[dict[str, Any]] = []
+    gap = timedelta(seconds=merge_gap_seconds)
+    for zone_segs in by_zone.values():
+        zone_segs.sort(key=lambda s: s["start"])
+        cur: dict[str, Any] | None = None
+        for s in zone_segs:
+            if cur is not None and s["start"] <= cur["end"] + gap:
+                cur["end"] = max(cur["end"], s["end"])
+                cur["sessions"] += 1
+                cur["present"] = cur["present"] or bool(s.get("present"))
+            else:
+                if cur is not None:
+                    visits.append(cur)
+                cur = {
+                    "zone_id": s["zone_id"],
+                    "zone_name": s["zone_name"],
+                    "floor_plan_id": s["floor_plan_id"],
+                    "floor_plan_name": s.get("floor_plan_name"),
+                    "start": s["start"],
+                    "end": s["end"],
+                    "sessions": 1,
+                    "present": bool(s.get("present")),
+                }
+        if cur is not None:
+            visits.append(cur)
+
+    for v in visits:
+        v["seconds"] = (v["end"] - v["start"]).total_seconds()
+    return sorted(visits, key=lambda v: v["start"])
