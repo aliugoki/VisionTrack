@@ -59,6 +59,16 @@ React frontend (live wall, floor plan, alerts, recordings, analytics)
 
 The full architecture diagram lives in `docs/architecture.md` (to be written in Step 2).
 
+## Documentation
+
+- [`docs/SPATIAL_ANALYTICS.md`](docs/SPATIAL_ANALYTICS.md) — indoor geofencing &
+  reporting: zones, calibration (homography), occupancy / dwell / timeline /
+  attendance / zone-rollup, the report route (CSV + printable PDF), filters,
+  code map, and how to run the tests.
+- [`docs/MV3DT.md`](docs/MV3DT.md) — multi-view 3D tracking / cross-camera fusion.
+- [`docs/DEPLOY_BOTH_SYSTEMS.md`](docs/DEPLOY_BOTH_SYSTEMS.md) — deploying
+  VisionTrack alongside FaceTrack.
+
 ---
 
 ## What's in this scaffold
