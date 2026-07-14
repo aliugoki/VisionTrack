@@ -93,10 +93,16 @@ def accumulate_dwell(
     "end": datetime, "present": bool}`` where ``start``/``end`` are already
     clipped to the query window and ``present`` marks a still-active track.
 
-    Zone attribution: if a track carries a pre-resolved ``"zones"`` list (from
-    ``zone_resolve.resolve_track_zone_refs`` — position-aware/desk-level), that is
-    used; otherwise it falls back to the coarse camera-marker map ``cam_zones``.
-    Tracks without an ``emp_id`` (anonymous) or in no zone are skipped.
+    Zone attribution, in order of precedence per track:
+      * ``"zone_durations"`` — a list of ``{"ref", "seconds", "first", "last"}``
+        from per-track-point time-weighting (``zone_durations_from_intervals``),
+        where a track that *moved* between zones splits its time across them.
+      * ``"zones"`` — a pre-resolved ref list (position/desk-level or marker); the
+        whole clipped ``[start, end]`` duration is attributed to each.
+      * ``cam_zones[camera_id]`` — the coarse camera-marker fallback.
+
+    Tracks without an ``emp_id`` (anonymous) or in no zone are skipped. A track
+    counts as one ``session`` per zone it was in (not per point).
 
     Returns one row per (emp_id, zone) with ``seconds`` (float), ``sessions``,
     ``first_seen``, ``last_seen``, ``present`` (any fragment still active), and
@@ -107,18 +113,28 @@ def accumulate_dwell(
         emp_id = t.get("emp_id")
         if not emp_id:
             continue  # anonymous — not a named employee
-        zones = t.get("zones")
-        if zones is None:
-            zones = (cam_zones or {}).get(str(t["camera_id"]))
-        if not zones:
-            continue  # in no zone
-        start: datetime = t["start"]
-        end: datetime = t["end"]
-        seconds = (end - start).total_seconds()
-        if seconds < 0:
-            seconds = 0.0
         present = bool(t.get("present"))
-        for ref in zones:
+
+        # Normalise this track into (ref, seconds, first, last) contributions.
+        contributions: list[tuple[dict[str, Any], float, datetime, datetime]] = []
+        zone_durations = t.get("zone_durations")
+        if zone_durations is not None:
+            for zd in zone_durations:
+                secs = max(0.0, float(zd["seconds"]))
+                contributions.append((zd["ref"], secs, zd["first"], zd["last"]))
+        else:
+            zones = t.get("zones")
+            if zones is None:
+                zones = (cam_zones or {}).get(str(t["camera_id"]))
+            if not zones:
+                continue  # in no zone
+            start = t["start"]
+            end = t["end"]
+            secs = max(0.0, (end - start).total_seconds())
+            for ref in zones:
+                contributions.append((ref, secs, start, end))
+
+        for ref, secs, first, last in contributions:
             key = (str(emp_id), ref["zone_id"])
             row = agg.get(key)
             if row is None:
@@ -131,20 +147,112 @@ def accumulate_dwell(
                     "zone_name": ref["zone_name"],
                     "seconds": 0.0,
                     "sessions": 0,
-                    "first_seen": start,
-                    "last_seen": end,
+                    "first_seen": first,
+                    "last_seen": last,
                     "present": False,
                 }
                 agg[key] = row
-            row["seconds"] += seconds
+            row["seconds"] += secs
             row["sessions"] += 1
-            row["first_seen"] = min(row["first_seen"], start)
-            row["last_seen"] = max(row["last_seen"], end)
+            row["first_seen"] = min(row["first_seen"], first)
+            row["last_seen"] = max(row["last_seen"], last)
             row["present"] = row["present"] or present
             if t.get("name") and not row.get("name"):
                 row["name"] = t["name"]
 
     return sorted(agg.values(), key=lambda r: r["seconds"], reverse=True)
+
+
+def track_zone_intervals(
+    points: list[tuple[datetime, list[dict[str, Any]]]],
+    seg_start: datetime,
+    seg_end: datetime,
+) -> list[dict[str, Any]]:
+    """Turn one track's timestamped zone samples into time-ordered zone visits.
+
+    ``points`` is a list of ``(ts, [zone_refs])`` sorted ascending by ``ts`` —
+    each the zones a track's foot-point fell in at that moment (from
+    ``track_points.world_x/world_y``). Using forward-fill, each sample's zone(s)
+    hold until the next sample; the first sample extends back to ``seg_start`` and
+    the last forward to ``seg_end`` (both the track's window-clipped bounds).
+    Consecutive samples in the same zone merge into one contiguous interval, so a
+    person who walks Desk A -> Desk B produces ``[DeskA:.., DeskB:..]`` rather
+    than one lumped visit. Samples in no zone contribute nothing (aisle/between
+    desks). Returns interval dicts ``{zone_id, zone_name, floor_plan_id,
+    floor_plan_name, start, end}`` ordered by ``start``.
+    """
+    n = len(points)
+    if n == 0:
+        return []
+
+    # Raw per-sample sub-intervals, grouped by zone.
+    by_zone: dict[str, list[tuple[dict[str, Any], datetime, datetime]]] = {}
+    for i, (ts, refs) in enumerate(points):
+        cur = seg_start if i == 0 else ts
+        nxt = seg_end if i == n - 1 else points[i + 1][0]
+        lo = max(cur, seg_start)
+        hi = min(nxt, seg_end)
+        if hi <= lo:
+            continue
+        for ref in refs:
+            by_zone.setdefault(ref["zone_id"], []).append((ref, lo, hi))
+
+    intervals: list[dict[str, Any]] = []
+    for items in by_zone.values():
+        items.sort(key=lambda x: x[1])
+        cref, clo, chi = items[0]
+        for ref, lo, hi in items[1:]:
+            if lo <= chi:  # contiguous (forward-fill) or overlapping -> merge
+                chi = max(chi, hi)
+            else:
+                intervals.append(_interval(cref, clo, chi))
+                cref, clo, chi = ref, lo, hi
+        intervals.append(_interval(cref, clo, chi))
+
+    return sorted(intervals, key=lambda s: s["start"])
+
+
+def _interval(ref: dict[str, Any], start: datetime, end: datetime) -> dict[str, Any]:
+    return {
+        "zone_id": ref["zone_id"],
+        "zone_name": ref["zone_name"],
+        "floor_plan_id": ref["floor_plan_id"],
+        "floor_plan_name": ref.get("floor_plan_name"),
+        "start": start,
+        "end": end,
+    }
+
+
+def zone_durations_from_intervals(
+    intervals: Iterable[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Collapse a track's zone intervals into per-zone totals for dwell.
+
+    Returns ``[{"ref", "seconds", "first", "last"}]`` — one entry per distinct
+    zone the track visited, ``seconds`` summed across its intervals. Feeds
+    ``accumulate_dwell`` via a track's ``"zone_durations"``.
+    """
+    by: dict[str, dict[str, Any]] = {}
+    for s in intervals:
+        secs = max(0.0, (s["end"] - s["start"]).total_seconds())
+        e = by.get(s["zone_id"])
+        if e is None:
+            by[s["zone_id"]] = {
+                "ref": {
+                    "floor_plan_id": s["floor_plan_id"],
+                    "floor_plan_name": s.get("floor_plan_name"),
+                    "zone_id": s["zone_id"],
+                    "zone_name": s["zone_name"],
+                },
+                "seconds": secs,
+                "first": s["start"],
+                "last": s["end"],
+            }
+        else:
+            e["seconds"] += secs
+            e["first"] = min(e["first"], s["start"])
+            e["last"] = max(e["last"], s["end"])
+    return list(by.values())
 
 
 def build_person_timeline(

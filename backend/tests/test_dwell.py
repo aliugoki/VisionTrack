@@ -11,6 +11,8 @@ from app.modules.analytics.dwell import (
     build_person_timeline,
     camera_zone_index,
     clip_interval,
+    track_zone_intervals,
+    zone_durations_from_intervals,
 )
 
 T0 = datetime(2026, 7, 15, 9, 0, 0, tzinfo=timezone.utc)
@@ -205,3 +207,88 @@ def test_timeline_merges_overlapping_fragments():
 
 def test_timeline_empty():
     assert build_person_timeline([]) == []
+
+
+# --------------------------------------------------------------------------- #
+# track_zone_intervals — per-track-point time-weighting
+# --------------------------------------------------------------------------- #
+
+def _refA():
+    return {"zone_id": "zL", "zone_name": "Sales", "floor_plan_id": "fp1",
+            "floor_plan_name": "Ground Floor"}
+
+
+def _refB():
+    return {"zone_id": "zR", "zone_name": "Production", "floor_plan_id": "fp1",
+            "floor_plan_name": "Ground Floor"}
+
+
+def _samp(min_off, refs):
+    return (T0 + timedelta(minutes=min_off), refs)
+
+
+def test_intervals_single_zone_spans_segment():
+    # Three samples all in Sales at t=2,4,6; segment [0,10] -> one interval [0,10]
+    # (head extends to seg_start, tail to seg_end via forward-fill).
+    pts = [_samp(2, [_refA()]), _samp(4, [_refA()]), _samp(6, [_refA()])]
+    ivs = track_zone_intervals(pts, T0, T0 + timedelta(minutes=10))
+    assert len(ivs) == 1
+    assert ivs[0]["zone_name"] == "Sales"
+    assert ivs[0]["start"] == T0 and ivs[0]["end"] == T0 + timedelta(minutes=10)
+
+
+def test_intervals_move_A_to_B_splits_time():
+    # Sales until minute 5, then Production. Segment [0,10].
+    # Forward-fill: A owns [0,5) then [5, ...] is B -> A:[0,5], B:[5,10].
+    pts = [_samp(0, [_refA()]), _samp(5, [_refB()])]
+    ivs = track_zone_intervals(pts, T0, T0 + timedelta(minutes=10))
+    assert [(i["zone_name"], i["start"], i["end"]) for i in ivs] == [
+        ("Sales", T0, T0 + timedelta(minutes=5)),
+        ("Production", T0 + timedelta(minutes=5), T0 + timedelta(minutes=10)),
+    ]
+
+
+def test_intervals_return_visit_separates():
+    # A -> B -> A: three intervals, Sales appears twice.
+    pts = [_samp(0, [_refA()]), _samp(3, [_refB()]), _samp(6, [_refA()])]
+    ivs = track_zone_intervals(pts, T0, T0 + timedelta(minutes=9))
+    assert [i["zone_name"] for i in ivs] == ["Sales", "Production", "Sales"]
+
+
+def test_intervals_off_zone_samples_contribute_nothing():
+    # Middle sample is in no zone (aisle) -> that time is unattributed.
+    pts = [_samp(0, [_refA()]), _samp(4, []), _samp(8, [_refA()])]
+    ivs = track_zone_intervals(pts, T0, T0 + timedelta(minutes=12))
+    # Two Sales intervals: [0,4] and [8,12]; the [4,8] aisle gap is dropped.
+    assert [(i["start"], i["end"]) for i in ivs] == [
+        (T0, T0 + timedelta(minutes=4)),
+        (T0 + timedelta(minutes=8), T0 + timedelta(minutes=12)),
+    ]
+
+
+def test_intervals_empty_points():
+    assert track_zone_intervals([], T0, T0 + timedelta(minutes=5)) == []
+
+
+def test_zone_durations_from_intervals_sums_per_zone():
+    ivs = track_zone_intervals(
+        [_samp(0, [_refA()]), _samp(3, [_refB()]), _samp(6, [_refA()])],
+        T0, T0 + timedelta(minutes=9))
+    zd = {z["ref"]["zone_name"]: z for z in zone_durations_from_intervals(ivs)}
+    # Sales = [0,3] + [6,9] = 6 min; Production = [3,6] = 3 min.
+    assert zd["Sales"]["seconds"] == 6 * 60
+    assert zd["Production"]["seconds"] == 3 * 60
+    assert zd["Sales"]["first"] == T0
+    assert zd["Sales"]["last"] == T0 + timedelta(minutes=9)
+
+
+def test_accumulate_dwell_consumes_zone_durations():
+    # A single moving track -> two zones via zone_durations; one session each.
+    ivs = track_zone_intervals(
+        [_samp(0, [_refA()]), _samp(5, [_refB()])], T0, T0 + timedelta(minutes=10))
+    track = {"emp_id": "E1", "name": "Ali", "present": True,
+             "zone_durations": zone_durations_from_intervals(ivs)}
+    rows = {r["zone_name"]: r for r in accumulate_dwell([track])}
+    assert rows["Sales"]["seconds"] == 5 * 60 and rows["Sales"]["sessions"] == 1
+    assert rows["Production"]["seconds"] == 5 * 60 and rows["Production"]["sessions"] == 1
+    assert rows["Production"]["present"] is True

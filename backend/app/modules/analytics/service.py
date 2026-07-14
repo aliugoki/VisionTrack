@@ -36,11 +36,14 @@ from app.modules.analytics.dwell import (
     build_person_timeline,
     camera_zone_index,
     clip_interval,
+    track_zone_intervals,
+    zone_durations_from_intervals,
 )
 from app.modules.analytics.occupancy import zones_occupancy_from_tracks
 from app.modules.analytics.zone_resolve import (
     camera_plan_zones,
     homographies_by_camera,
+    point_zone_refs,
     resolve_track_zone_refs,
 )
 from app.modules.cameras.models import Camera
@@ -341,6 +344,114 @@ async def _zone_resolution_context(db: AsyncSession, *, tenant_id: UUID):
     return fps, marker_zones, plan_zones, homographies
 
 
+async def _resolve_tracks_with_zones(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    rows,
+    best_by_track: dict,
+    best_by_person: dict,
+    marker_zones: dict,
+    plan_zones: dict,
+    homographies: dict,
+    started_after: datetime,
+    started_before: datetime,
+    active_cutoff: datetime,
+    only_emp: str | None = None,
+) -> list[dict]:
+    """Turn Track rows into named-employee presence records with zone attribution.
+
+    For a track on a **calibrated** camera we time-weight per ``track_point``: the
+    person's foot-point (``world_x/world_y``, projected at ingest) is tested
+    against the zone polygons frame by frame, so a track that *moves* between
+    desks splits its time (``"intervals"``). Tracks with no world points fall back
+    to whole-track attribution (``"zones"`` + ``start``/``end``) via
+    ``resolve_track_zone_refs`` (last-bbox position for calibrated cameras,
+    camera-marker otherwise). Anonymous tracks (and, if ``only_emp`` is given,
+    other employees) are dropped.
+
+    Each returned dict has ``emp_id``, ``name``, ``present``, ``camera_id`` and
+    EITHER ``intervals`` (time-ordered zone visits) OR ``zones`` + ``start`` +
+    ``end``.
+    """
+    # 1) Clip + identity + split calibrated vs not.
+    named: list[dict] = []
+    calib_meta: dict = {}  # track_id -> {camera_id, seg_start, seg_end}
+    for r in rows:
+        ident = best_by_track.get(r.id) or (
+            best_by_person.get(r.person_id) if r.person_id is not None else None)
+        if not ident or not ident[0]:
+            continue
+        if only_emp is not None and ident[0] != only_emp:
+            continue
+        raw_end = r.ended_at if r.ended_at is not None else r.updated_at
+        clipped = clip_interval(r.started_at, raw_end, started_after, started_before)
+        if clipped is None:
+            continue
+        present = r.ended_at is None and r.updated_at >= active_cutoff
+        rec = {
+            "track_id": r.id, "camera_id": str(r.camera_id),
+            "emp_id": ident[0], "name": ident[1], "present": present,
+            "last_bbox": r.last_bbox, "start": clipped[0], "end": clipped[1],
+        }
+        named.append(rec)
+        if str(r.camera_id) in homographies:
+            calib_meta[r.id] = {
+                "camera_id": str(r.camera_id),
+                "seg_start": clipped[0], "seg_end": clipped[1],
+            }
+
+    # 2) Per-point intervals for calibrated tracks (one bounded track_points scan).
+    intervals_by_track: dict = {}
+    if calib_meta:
+        pt_rows = (await db.execute(
+            select(
+                TrackPoint.track_id, TrackPoint.ts,
+                TrackPoint.world_x, TrackPoint.world_y,
+            ).where(
+                TrackPoint.tenant_id == tenant_id,
+                TrackPoint.track_id.in_(list(calib_meta.keys())),
+                TrackPoint.ts >= started_after,
+                TrackPoint.ts < started_before,
+                TrackPoint.world_x.is_not(None),
+                TrackPoint.world_y.is_not(None),
+            ).order_by(TrackPoint.track_id, TrackPoint.ts)
+        )).all()
+        grouped: dict = {}
+        for r in pt_rows:
+            grouped.setdefault(r.track_id, []).append(r)
+        for tid, pts in grouped.items():
+            meta = calib_meta[tid]
+            pz = plan_zones.get(meta["camera_id"], [])
+            samples = [
+                (p.ts, point_zone_refs(float(p.world_x), float(p.world_y), pz))
+                for p in pts
+            ]
+            intervals_by_track[tid] = track_zone_intervals(
+                samples, meta["seg_start"], meta["seg_end"])
+
+    # 3) Emit records: per-point where we have world samples, else whole-track.
+    out: list[dict] = []
+    for rec in named:
+        tid = rec["track_id"]
+        if tid in intervals_by_track:
+            out.append({
+                "emp_id": rec["emp_id"], "name": rec["name"],
+                "present": rec["present"], "camera_id": rec["camera_id"],
+                "intervals": intervals_by_track[tid],
+            })
+        else:
+            refs = resolve_track_zone_refs(
+                rec["camera_id"], rec["last_bbox"], homographies,
+                marker_zones, plan_zones)
+            out.append({
+                "emp_id": rec["emp_id"], "name": rec["name"],
+                "present": rec["present"], "camera_id": rec["camera_id"],
+                "zones": refs, "start": rec["start"], "end": rec["end"],
+            })
+    return out
+
+
 async def get_zone_occupancy(
     db: AsyncSession,
     *,
@@ -482,26 +593,24 @@ async def get_zone_dwell(
     fps, marker_zones, plan_zones, homographies = await _zone_resolution_context(
         db, tenant_id=tenant_id)
 
+    # 4) Resolve each track to zones — time-weighted per track-point on calibrated
+    #    cameras (splits a moving track across desks), whole-track otherwise.
+    resolved = await _resolve_tracks_with_zones(
+        db, tenant_id=tenant_id, rows=rows,
+        best_by_track=best_by_track, best_by_person=best_by_person,
+        marker_zones=marker_zones, plan_zones=plan_zones, homographies=homographies,
+        started_after=started_after, started_before=started_before,
+        active_cutoff=active_cutoff)
+
     tracks: list[dict] = []
-    for r in rows:
-        ident = best_by_track.get(r.id) or (
-            best_by_person.get(r.person_id) if r.person_id is not None else None)
-        if not ident or not ident[0]:
-            continue  # anonymous — dwell is about named employees
-        # Measured presence: from started_at to the last activity (ended_at for a
-        # closed track, else the last frame's updated_at). Clip to the window.
-        raw_end = r.ended_at if r.ended_at is not None else r.updated_at
-        clipped = clip_interval(r.started_at, raw_end, started_after, started_before)
-        if clipped is None:
-            continue
-        present = r.ended_at is None and r.updated_at >= active_cutoff
-        tracks.append({
-            "camera_id": str(r.camera_id),
-            "emp_id": ident[0], "name": ident[1],
-            "start": clipped[0], "end": clipped[1], "present": present,
-            "zones": resolve_track_zone_refs(
-                r.camera_id, r.last_bbox, homographies, marker_zones, plan_zones),
-        })
+    for rec in resolved:
+        if "intervals" in rec:
+            tracks.append({
+                "emp_id": rec["emp_id"], "name": rec["name"], "present": rec["present"],
+                "zone_durations": zone_durations_from_intervals(rec["intervals"]),
+            })
+        else:
+            tracks.append(rec)  # zones + start + end
 
     dwell_rows = [
         row for row in accumulate_dwell(tracks)
@@ -559,29 +668,31 @@ async def get_person_timeline(
     fps, marker_zones, plan_zones, homographies = await _zone_resolution_context(
         db, tenant_id=tenant_id)
 
+    resolved = await _resolve_tracks_with_zones(
+        db, tenant_id=tenant_id, rows=rows,
+        best_by_track=best_by_track, best_by_person=best_by_person,
+        marker_zones=marker_zones, plan_zones=plan_zones, homographies=homographies,
+        started_after=started_after, started_before=started_before,
+        active_cutoff=active_cutoff, only_emp=emp_id)
+
     name: str | None = None
     segments: list[dict] = []
-    for r in rows:
-        ident = best_by_track.get(r.id) or (
-            best_by_person.get(r.person_id) if r.person_id is not None else None)
-        if not ident or ident[0] != emp_id:
-            continue  # not this employee
-        if ident[1]:
-            name = ident[1]
-        raw_end = r.ended_at if r.ended_at is not None else r.updated_at
-        clipped = clip_interval(r.started_at, raw_end, started_after, started_before)
-        if clipped is None:
-            continue
-        present = r.ended_at is None and r.updated_at >= active_cutoff
-        for ref in resolve_track_zone_refs(
-                r.camera_id, r.last_bbox, homographies, marker_zones, plan_zones):
-            segments.append({
-                "zone_id": ref["zone_id"],
-                "zone_name": ref["zone_name"],
-                "floor_plan_id": ref["floor_plan_id"],
-                "floor_plan_name": ref["floor_plan_name"],
-                "start": clipped[0], "end": clipped[1], "present": present,
-            })
+    for rec in resolved:
+        if rec["name"]:
+            name = rec["name"]
+        if "intervals" in rec:
+            # Per-point: each interval is already a time-ordered zone visit,
+            # reflecting movement within the track.
+            for iv in rec["intervals"]:
+                segments.append({**iv, "present": rec["present"]})
+        else:
+            for ref in rec["zones"]:
+                segments.append({
+                    "zone_id": ref["zone_id"], "zone_name": ref["zone_name"],
+                    "floor_plan_id": ref["floor_plan_id"],
+                    "floor_plan_name": ref["floor_plan_name"],
+                    "start": rec["start"], "end": rec["end"], "present": rec["present"],
+                })
 
     visits = build_person_timeline(segments, merge_gap_seconds=merge_gap_seconds)
     return {

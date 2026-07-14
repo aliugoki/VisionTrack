@@ -131,6 +131,28 @@ def resolve_track_zone_refs(
     return marker_zones.get(cam, [])
 
 
+def point_zone_refs(
+    wx: float, wy: float, plan_zones_for_camera: list,
+) -> list[dict[str, Any]]:
+    """Zones containing a floor-plan point ``(wx, wy)`` for one camera.
+
+    ``plan_zones_for_camera`` is ``camera_plan_zones(...)[camera_id]`` — the
+    plan(s) the camera is on with their zone polygons. Used for per-track-point
+    time-weighting, where ``track_points.world_x/world_y`` already hold the
+    foot-point projected to floor fractions at ingest (so no homography needed
+    here). Returns ``[]`` when the point is in no zone (aisle / between desks).
+    """
+    refs: list[dict[str, Any]] = []
+    for fp_id, fp_name, zones in plan_zones_for_camera or []:
+        for z_id, z_name, poly in zones:
+            if point_in_polygon((wx, wy), poly):
+                refs.append({
+                    "floor_plan_id": fp_id, "floor_plan_name": fp_name,
+                    "zone_id": z_id, "zone_name": z_name,
+                })
+    return refs
+
+
 def homographies_by_camera(cameras: Iterable[tuple[Any, Any]]) -> dict[str, list[float]]:
     """Extract usable homographies from ``(camera_id, calibration)`` rows.
 
@@ -156,5 +178,6 @@ __all__ = [
     "camera_plan_zones",
     "camera_zone_index",
     "resolve_track_zone_refs",
+    "point_zone_refs",
     "homographies_by_camera",
 ]

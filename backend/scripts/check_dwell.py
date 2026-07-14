@@ -27,7 +27,7 @@ from app.modules.floor_plans.models import FloorPlan
 from app.modules.persons.models import PersonIdentity
 from app.modules.sites.models import Site
 from app.modules.tenants.models import Tenant
-from app.modules.tracks.models import Track
+from app.modules.tracks.models import Track, TrackPoint
 
 UTC = timezone.utc
 
@@ -269,6 +269,82 @@ async def main() -> None:
         for tbl in (PersonIdentity, Track, FloorPlan, Camera, Site):
             await db.execute(delete(tbl).where(tbl.tenant_id == t2.id))
         await db.execute(delete(Tenant).where(Tenant.id == t2.id))
+        await db.commit()
+
+        # ---- Per-track-point time-weighting: ONE track that MOVES Desk A -> Desk B.
+        # track_points carry world_x/world_y (projected at ingest). last_bbox points
+        # at Desk B, so whole-track attribution would say "all Desk B" — per-point
+        # weighting must instead split the time 50/50.
+        t3 = Tenant(name="Move Test Co", subdomain=f"move-{uuid4().hex[:8]}")
+        db.add(t3)
+        await db.flush()
+        s3 = Site(tenant_id=t3.id, name="Office")
+        db.add(s3)
+        await db.flush()
+        mcam = Camera(tenant_id=t3.id, site_id=s3.id, name="Move Cam",
+                      rtsp_url="rtsp://x/move", mediamtx_path=f"m-{uuid4().hex[:6]}",
+                      calibration={"homography": H_SCALE})
+        db.add(mcam)
+        await db.flush()
+        move_zones = [
+            {"id": str(uuid4()), "name": "Desk A", "rules": [],
+             "polygon": [{"x": 0.0, "y": 0.0}, {"x": 0.5, "y": 0.0},
+                         {"x": 0.5, "y": 1.0}, {"x": 0.0, "y": 1.0}]},
+            {"id": str(uuid4()), "name": "Desk B", "rules": [],
+             "polygon": [{"x": 0.5, "y": 0.0}, {"x": 1.0, "y": 0.0},
+                         {"x": 1.0, "y": 1.0}, {"x": 0.5, "y": 1.0}]},
+        ]
+        fp3 = FloorPlan(
+            tenant_id=t3.id, site_id=s3.id, name="Move Floor",
+            original_filename="m.png", original_content_type="image/png",
+            original_size_bytes=1, format="png", width_px=1000, height_px=1000,
+            storage_key_original="k",
+            markers=[{"camera_id": str(mcam.id), "x": 0.25, "y": 0.5}],
+            zones=move_zones)
+        db.add(fp3)
+        await db.flush()
+        # Closed 20-min track; last_bbox foot-point -> Desk B (right).
+        mtr = Track(tenant_id=t3.id, camera_id=mcam.id, tracker_id=1,
+                    started_at=now - timedelta(minutes=20), ended_at=now,
+                    first_bbox={"x1": 200, "y1": 700, "x2": 300, "y2": 900},
+                    last_bbox={"x1": 700, "y1": 700, "x2": 800, "y2": 900}, point_count=4)
+        db.add(mtr)
+        await db.flush()
+        # world_x: 0.25 (Desk A) for the first half, 0.75 (Desk B) for the second.
+        samples = [(20, 0.25), (15, 0.25), (10, 0.75), (5, 0.75)]
+        for mins_ago, wx in samples:
+            db.add(TrackPoint(
+                ts=now - timedelta(minutes=mins_ago), track_id=mtr.id,
+                tenant_id=t3.id, camera_id=mcam.id, tracker_id=1,
+                bbox_x1=0, bbox_y1=0, bbox_x2=10, bbox_y2=10, confidence=0.9,
+                world_x=wx, world_y=0.5))
+        db.add(PersonIdentity(tenant_id=t3.id, track_id=mtr.id, camera_id=mcam.id,
+                              emp_id="E7", name="Mo", votes=5, confidence=0.9, source="face"))
+        await db.commit()
+
+        mv = await get_zone_dwell(
+            db, tenant_id=t3.id,
+            started_after=now - timedelta(hours=1), started_before=now + timedelta(hours=1))
+        mrows = {r["zone_name"]: r for r in mv["rows"]}
+        print("\nPer-track-point weighting (one track A -> B):")
+        for r in mv["rows"]:
+            print(f"  Mo {r['zone_name']}: {int(r['seconds'])//60}m (sessions={r['sessions']})")
+        _assert(set(mrows) == {"Desk A", "Desk B"}, "moving track split across BOTH desks")
+        _assert(mrows["Desk A"]["seconds"] == 10 * 60, "Desk A = 10m (first half)")
+        _assert(mrows["Desk B"]["seconds"] == 10 * 60, "Desk B = 10m (second half, not the whole 20m)")
+        _assert(mrows["Desk A"]["sessions"] == 1 and mrows["Desk B"]["sessions"] == 1,
+                "one session per desk (not per point)")
+
+        mtl = await get_person_timeline(
+            db, tenant_id=t3.id, emp_id="E7",
+            started_after=now - timedelta(hours=1), started_before=now + timedelta(hours=1))
+        print("Timeline:", [(s["zone_name"], f"{int(s['seconds'])//60}m") for s in mtl["segments"]])
+        _assert([s["zone_name"] for s in mtl["segments"]] == ["Desk A", "Desk B"],
+                "timeline shows the move: Desk A then Desk B")
+
+        for tbl in (PersonIdentity, TrackPoint, Track, FloorPlan, Camera, Site):
+            await db.execute(delete(tbl).where(tbl.tenant_id == t3.id))
+        await db.execute(delete(Tenant).where(Tenant.id == t3.id))
         await db.commit()
 
         # Cleanup so a shared DB stays tidy (throwaway DBs don't need this).
