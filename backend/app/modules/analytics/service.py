@@ -31,6 +31,11 @@ from sqlalchemy import and_, distinct, func, or_, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.alerts.models import Alert
+from app.modules.analytics.dwell import (
+    accumulate_dwell,
+    camera_zone_index,
+    clip_interval,
+)
 from app.modules.analytics.occupancy import bucket_tracks_by_camera, zones_occupancy
 from app.modules.floor_plans.models import FloorPlan
 from app.modules.persons.models import PersonIdentity
@@ -384,4 +389,124 @@ async def get_zone_occupancy(
         "as_of": now,
         "active_window_sec": active_window_sec,
         "zones": zones_occupancy(fps, per_camera),
+    }
+
+
+async def _best_identity_by_track(
+    db: AsyncSession, *, tenant_id: UUID, track_ids: list, person_ids: list
+) -> tuple[dict, dict]:
+    """Strongest face identity per track_id and per person_id.
+
+    Returns ``(best_by_track, best_by_person)`` mapping id -> ``(emp_id, name)``.
+    "Strongest" = most votes, then confidence, then most recent label — so a
+    single stray correlation can't outrank an established identity. Shared by the
+    occupancy and dwell paths so both agree on who a track is.
+    """
+    best_by_track: dict = {}
+    best_by_person: dict = {}
+    if not (track_ids or person_ids):
+        return best_by_track, best_by_person
+    conds = []
+    if track_ids:
+        conds.append(PersonIdentity.track_id.in_(track_ids))
+    if person_ids:
+        conds.append(PersonIdentity.person_id.in_(person_ids))
+    ident_rows = (await db.execute(
+        select(
+            PersonIdentity.track_id, PersonIdentity.person_id,
+            PersonIdentity.emp_id, PersonIdentity.name,
+        ).where(PersonIdentity.tenant_id == tenant_id, or_(*conds))
+        .order_by(
+            PersonIdentity.votes.desc(),
+            PersonIdentity.confidence.desc(),
+            PersonIdentity.last_labeled_at.desc(),
+        )
+    )).all()
+    for row in ident_rows:
+        if row.track_id is not None and row.track_id not in best_by_track:
+            best_by_track[row.track_id] = (row.emp_id, row.name)
+        if row.person_id is not None and row.person_id not in best_by_person:
+            best_by_person[row.person_id] = (row.emp_id, row.name)
+    return best_by_track, best_by_person
+
+
+async def get_zone_dwell(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    started_after: datetime,
+    started_before: datetime,
+    active_window_sec: int = 60,
+    min_seconds: int = 0,
+) -> dict:
+    """Per-named-person time-in-zone over ``[started_after, started_before)``.
+
+    "Indoor geofencing": each track's lifetime on a camera is the person's dwell
+    in that camera's zone(s). We sum per (employee, zone), clipped to the window,
+    and flag anyone whose track is still active (``present``) so the UI can show
+    "here now". Zone binding is camera-in-polygon — identical to occupancy, so a
+    department-level camera gives department dwell and a desk-level camera gives
+    desk dwell. Pure aggregation lives in ``dwell.py``.
+    """
+    now = datetime.now(UTC)
+    active_cutoff = now - timedelta(seconds=active_window_sec)
+
+    # 1) Tracks overlapping the window: started before the window ends AND either
+    #    still open or ended after the window starts.
+    rows = (await db.execute(
+        select(
+            Track.id, Track.camera_id, Track.person_id,
+            Track.started_at, Track.ended_at, Track.updated_at,
+        ).where(
+            Track.tenant_id == tenant_id,
+            Track.started_at < started_before,
+            or_(Track.ended_at.is_(None), Track.ended_at >= started_after),
+        )
+    )).all()
+
+    # 2) Attach the strongest face identity (by track, else by person).
+    track_ids = [r.id for r in rows]
+    person_ids = [r.person_id for r in rows if r.person_id is not None]
+    best_by_track, best_by_person = await _best_identity_by_track(
+        db, tenant_id=tenant_id, track_ids=track_ids, person_ids=person_ids
+    )
+
+    tracks: list[dict] = []
+    for r in rows:
+        ident = best_by_track.get(r.id) or (
+            best_by_person.get(r.person_id) if r.person_id is not None else None)
+        if not ident or not ident[0]:
+            continue  # anonymous — dwell is about named employees
+        # Measured presence: from started_at to the last activity (ended_at for a
+        # closed track, else the last frame's updated_at). Clip to the window.
+        raw_end = r.ended_at if r.ended_at is not None else r.updated_at
+        clipped = clip_interval(r.started_at, raw_end, started_after, started_before)
+        if clipped is None:
+            continue
+        present = r.ended_at is None and r.updated_at >= active_cutoff
+        tracks.append({
+            "camera_id": str(r.camera_id),
+            "emp_id": ident[0], "name": ident[1],
+            "start": clipped[0], "end": clipped[1], "present": present,
+        })
+
+    # 3) Camera -> zones, then sum dwell per (person, zone).
+    fps = [
+        {"id": r.id, "name": r.name, "zones": r.zones, "markers": r.markers}
+        for r in (await db.execute(
+            select(FloorPlan.id, FloorPlan.name, FloorPlan.zones, FloorPlan.markers)
+            .where(FloorPlan.tenant_id == tenant_id)
+        )).all()
+    ]
+    cam_zones = camera_zone_index(fps)
+    dwell_rows = [
+        row for row in accumulate_dwell(tracks, cam_zones)
+        if row["seconds"] >= min_seconds
+    ]
+    return {
+        "as_of": now,
+        "from": started_after,
+        "to": started_before,
+        "active_window_sec": active_window_sec,
+        "rows": dwell_rows,
     }

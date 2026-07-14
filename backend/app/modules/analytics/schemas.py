@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class OverviewKPIs(BaseModel):
@@ -94,3 +94,34 @@ class ZoneOccupancyResponse(BaseModel):
     as_of: datetime            # server time this snapshot was computed
     active_window_sec: int     # a track counts as "present" if seen within this window
     zones: list[ZoneOccupancy]
+
+
+class ZoneDwellRow(BaseModel):
+    """How long one named employee spent in one zone over the window.
+
+    ``seconds`` is summed across all of that person's tracks on the zone's
+    cameras, clipped to the query window. ``sessions`` counts the track fragments
+    (re-acquisitions / multiple cameras). ``present`` is true if any of those
+    tracks is still active — i.e. the person is in the zone *right now*.
+    """
+    emp_id: str
+    name: str | None = None
+    floor_plan_id: str
+    floor_plan_name: str | None = None
+    zone_id: str
+    zone_name: str
+    seconds: float
+    sessions: int
+    first_seen: datetime
+    last_seen: datetime
+    present: bool
+
+
+class ZoneDwellResponse(BaseModel):
+    as_of: datetime            # server time this was computed
+    from_: datetime = Field(alias="from")   # window lower bound (inclusive)
+    to: datetime               # window upper bound (exclusive)
+    active_window_sec: int     # a track counts as "present now" if seen within this
+    rows: list[ZoneDwellRow]
+
+    model_config = {"populate_by_name": True}

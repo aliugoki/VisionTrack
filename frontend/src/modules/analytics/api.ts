@@ -6,6 +6,7 @@ import type {
   PersonsSummary,
   OverviewKPIs,
   TimeseriesResponse,
+  ZoneDwellResponse,
   ZoneOccupancyResponse,
 } from '@/modules/analytics/types';
 
@@ -101,6 +102,36 @@ export function useZoneOccupancy(windowSec = 60) {
         '/analytics/zones/occupancy',
         { params: { window: windowSec } },
       );
+      return data;
+    },
+  });
+}
+
+// Per-person zone dwell ("indoor geofencing") — who was in which zone and for
+// how long. Defaults to today (server-side). Refreshes every 15s so the
+// "here now" flags and running totals stay current without hammering the DB.
+export function useZoneDwell(params?: {
+  from?: string;
+  to?: string;
+  minSeconds?: number;
+}) {
+  return useQuery({
+    queryKey: [
+      'analytics',
+      'zone-dwell',
+      params?.from ?? null,
+      params?.to ?? null,
+      params?.minSeconds ?? 0,
+    ] as const,
+    refetchInterval: 15_000,
+    queryFn: async () => {
+      const { data } = await api.get<ZoneDwellResponse>('/analytics/zones/dwell', {
+        params: {
+          from: params?.from,
+          to: params?.to,
+          min_seconds: params?.minSeconds,
+        },
+      });
       return data;
     },
   });

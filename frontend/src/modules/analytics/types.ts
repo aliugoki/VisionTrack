@@ -72,3 +72,25 @@ export interface ZoneOccupancyResponse {
   active_window_sec: number;
   zones: ZoneOccupancy[];
 }
+
+export interface ZoneDwellRow {
+  emp_id: string;
+  name: string | null;
+  floor_plan_id: string;
+  floor_plan_name: string | null;
+  zone_id: string;
+  zone_name: string;
+  seconds: number;
+  sessions: number;
+  first_seen: string; // ISO datetime
+  last_seen: string; // ISO datetime
+  present: boolean; // still in the zone right now
+}
+
+export interface ZoneDwellResponse {
+  as_of: string;
+  from: string; // window lower bound (inclusive)
+  to: string; // window upper bound (exclusive)
+  active_window_sec: number;
+  rows: ZoneDwellRow[];
+}

@@ -30,6 +30,7 @@ from app.modules.analytics.schemas import (
     OverviewKPIs,
     PersonsSummary,
     TimeseriesResponse,
+    ZoneDwellResponse,
     ZoneOccupancyResponse,
 )
 from app.modules.analytics.service import (
@@ -37,6 +38,7 @@ from app.modules.analytics.service import (
     get_alerts_timeseries,
     get_overview,
     get_people_timeseries,
+    get_zone_dwell,
     get_zone_occupancy,
 )
 from app.modules.users.models import User
@@ -96,6 +98,43 @@ async def zones_occupancy_endpoint(
         db, tenant_id=current_user.tenant_id, active_window_sec=window
     )
     return ZoneOccupancyResponse(**data)
+
+
+@router.get("/zones/dwell", response_model=ZoneDwellResponse)
+async def zones_dwell_endpoint(
+    from_: datetime | None = Query(None, alias="from"),
+    to_: datetime | None = Query(None, alias="to"),
+    window: int = Query(
+        60, ge=5, le=600,
+        description="seconds; a person counts as 'here now' if seen within this window",
+    ),
+    min_seconds: int = Query(
+        0, ge=0,
+        description="drop (person, zone) rows below this many seconds of dwell",
+    ),
+    current_user: User = Depends(RequirePermission(ANALYTICS_READ)),
+    db: Annotated[AsyncSession, Depends(get_db)] = ...,
+) -> ZoneDwellResponse:
+    """Per-employee time-in-zone over a window (indoor geofencing).
+
+    Which named person was in which department/desk, for how long, and who is
+    there right now. Defaults to today (start of the current UTC day → now).
+    """
+    end = to_ or datetime.now(timezone.utc)
+    start = from_ or end.replace(hour=0, minute=0, second=0, microsecond=0)
+    if start.tzinfo is None:
+        start = start.replace(tzinfo=timezone.utc)
+    if end.tzinfo is None:
+        end = end.replace(tzinfo=timezone.utc)
+    data = await get_zone_dwell(
+        db,
+        tenant_id=current_user.tenant_id,
+        started_after=start,
+        started_before=end,
+        active_window_sec=window,
+        min_seconds=min_seconds,
+    )
+    return ZoneDwellResponse(**data)
 
 
 @router.get("/alerts/timeseries", response_model=TimeseriesResponse)

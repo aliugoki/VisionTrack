@@ -658,6 +658,19 @@
       "present": "present now",
       "known": "{{n}} known",
       "unknown": "{{n}} unknown"
+    },
+    "dwell": {
+      "heading": "Time in zone (today)",
+      "empty": "No employees tracked in any zone yet today. Recognized people appear here once they're seen on a camera inside a zone.",
+      "person": "Employee",
+      "zone": "Zone",
+      "time": "Time in zone",
+      "sessions": "Visits",
+      "status": "Status",
+      "hereNow": "Here now",
+      "leftAt": "Left {{time}}",
+      "peopleCount": "{{n}} people",
+      "hereNowCount": "{{n}} here now"
     }
   },
   "persons": {
