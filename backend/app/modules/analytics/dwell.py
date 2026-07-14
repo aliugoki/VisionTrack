@@ -85,14 +85,18 @@ def clip_interval(
 
 def accumulate_dwell(
     tracks: Iterable[dict[str, Any]],
-    cam_zones: dict[str, list[dict[str, Any]]],
+    cam_zones: dict[str, list[dict[str, Any]]] | None = None,
 ) -> list[dict[str, Any]]:
     """Sum per-(person, zone) dwell over the given tracks.
 
     Each track dict: ``{"camera_id", "emp_id", "name", "start": datetime,
     "end": datetime, "present": bool}`` where ``start``/``end`` are already
-    clipped to the query window and ``present`` marks a still-active track. Tracks
-    without an ``emp_id`` (anonymous) or whose camera is in no zone are skipped.
+    clipped to the query window and ``present`` marks a still-active track.
+
+    Zone attribution: if a track carries a pre-resolved ``"zones"`` list (from
+    ``zone_resolve.resolve_track_zone_refs`` — position-aware/desk-level), that is
+    used; otherwise it falls back to the coarse camera-marker map ``cam_zones``.
+    Tracks without an ``emp_id`` (anonymous) or in no zone are skipped.
 
     Returns one row per (emp_id, zone) with ``seconds`` (float), ``sessions``,
     ``first_seen``, ``last_seen``, ``present`` (any fragment still active), and
@@ -103,9 +107,11 @@ def accumulate_dwell(
         emp_id = t.get("emp_id")
         if not emp_id:
             continue  # anonymous — not a named employee
-        zones = cam_zones.get(str(t["camera_id"]))
+        zones = t.get("zones")
+        if zones is None:
+            zones = (cam_zones or {}).get(str(t["camera_id"]))
         if not zones:
-            continue  # camera sits in no zone
+            continue  # in no zone
         start: datetime = t["start"]
         end: datetime = t["end"]
         seconds = (end - start).total_seconds()

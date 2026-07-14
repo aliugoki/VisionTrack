@@ -37,7 +37,13 @@ from app.modules.analytics.dwell import (
     camera_zone_index,
     clip_interval,
 )
-from app.modules.analytics.occupancy import bucket_tracks_by_camera, zones_occupancy
+from app.modules.analytics.occupancy import zones_occupancy_from_tracks
+from app.modules.analytics.zone_resolve import (
+    camera_plan_zones,
+    homographies_by_camera,
+    resolve_track_zone_refs,
+)
+from app.modules.cameras.models import Camera
 from app.modules.floor_plans.models import FloorPlan
 from app.modules.persons.models import PersonIdentity
 from app.modules.recordings.models import Recording
@@ -312,6 +318,29 @@ async def get_persons_summary(
     }
 
 
+async def _zone_resolution_context(db: AsyncSession, *, tenant_id: UUID):
+    """Everything needed to attribute a track to zones: the tenant's floor plans,
+    the camera-marker zone index (coarse fallback), the per-camera plan zones
+    (for position mode), and each calibrated camera's homography.
+
+    Returns ``(floor_plans, marker_zones, plan_zones, homographies)``.
+    """
+    fps = [
+        {"id": r.id, "name": r.name, "zones": r.zones, "markers": r.markers}
+        for r in (await db.execute(
+            select(FloorPlan.id, FloorPlan.name, FloorPlan.zones, FloorPlan.markers)
+            .where(FloorPlan.tenant_id == tenant_id)
+        )).all()
+    ]
+    marker_zones = camera_zone_index(fps)
+    plan_zones = camera_plan_zones(fps)
+    cam_rows = (await db.execute(
+        select(Camera.id, Camera.calibration).where(Camera.tenant_id == tenant_id)
+    )).all()
+    homographies = homographies_by_camera([(r.id, r.calibration) for r in cam_rows])
+    return fps, marker_zones, plan_zones, homographies
+
+
 async def get_zone_occupancy(
     db: AsyncSession,
     *,
@@ -322,74 +351,50 @@ async def get_zone_occupancy(
 
     A track is "present" if it hasn't ended and was updated within
     ``active_window_sec``. It is "known" when it (or its person) carries a face
-    identity (``person_identities``) — i.e. the FaceTrack feed named it. Zone
-    occupancy sums the cameras whose floor-plan markers fall inside the zone
-    polygon (same model the alert evaluator uses). Pure aggregation is in
-    ``occupancy.py`` so it can be unit-tested without a DB.
+    identity (``person_identities``) — i.e. the FaceTrack feed named it.
+
+    Zone attribution is desk-level where possible: for a BEV-calibrated camera a
+    person is placed by projecting their foot-point into the zone polygons, so
+    several desks in one camera's view are counted separately; uncalibrated
+    cameras fall back to the camera-marker model. Pure aggregation is in
+    ``occupancy.py``.
     """
     now = datetime.now(UTC)
     cutoff = now - timedelta(seconds=active_window_sec)
 
-    # 1) Active tracks (id + camera + person link).
     active = (await db.execute(
-        select(Track.id, Track.camera_id, Track.person_id).where(
+        select(Track.id, Track.camera_id, Track.person_id, Track.last_bbox).where(
             Track.tenant_id == tenant_id,
             Track.ended_at.is_(None),
             Track.updated_at >= cutoff,
         )
     )).all()
 
-    # 2) Strongest face identity per track (by track_id first, else by person_id).
-    track_ids = [r.id for r in active]
-    person_ids = [r.person_id for r in active if r.person_id is not None]
-    best_by_track: dict = {}
-    best_by_person: dict = {}
-    if track_ids or person_ids:
-        conds = []
-        if track_ids:
-            conds.append(PersonIdentity.track_id.in_(track_ids))
-        if person_ids:
-            conds.append(PersonIdentity.person_id.in_(person_ids))
-        ident_rows = (await db.execute(
-            select(
-                PersonIdentity.track_id, PersonIdentity.person_id,
-                PersonIdentity.emp_id, PersonIdentity.name,
-            ).where(PersonIdentity.tenant_id == tenant_id, or_(*conds))
-            .order_by(  # strongest first → first seen per key wins
-                PersonIdentity.votes.desc(),
-                PersonIdentity.confidence.desc(),
-                PersonIdentity.last_labeled_at.desc(),
-            )
-        )).all()
-        for row in ident_rows:
-            if row.track_id is not None and row.track_id not in best_by_track:
-                best_by_track[row.track_id] = (row.emp_id, row.name)
-            if row.person_id is not None and row.person_id not in best_by_person:
-                best_by_person[row.person_id] = (row.emp_id, row.name)
+    best_by_track, best_by_person = await _best_identity_by_track(
+        db, tenant_id=tenant_id,
+        track_ids=[r.id for r in active],
+        person_ids=[r.person_id for r in active if r.person_id is not None],
+    )
+
+    fps, marker_zones, plan_zones, homographies = await _zone_resolution_context(
+        db, tenant_id=tenant_id)
 
     tracks = []
     for r in active:
         ident = best_by_track.get(r.id) or (
             best_by_person.get(r.person_id) if r.person_id is not None else None)
         tracks.append({
-            "track_id": str(r.id), "camera_id": str(r.camera_id),
+            "camera_id": str(r.camera_id),
             "emp_id": ident[0] if ident else None,
             "name": ident[1] if ident else None,
+            "zones": resolve_track_zone_refs(
+                r.camera_id, r.last_bbox, homographies, marker_zones, plan_zones),
         })
-    per_camera = bucket_tracks_by_camera(tracks)
 
-    # 3) Floor plans → zones → sum cameras in each polygon.
-    fps = [
-        {"id": r.id, "name": r.name, "zones": r.zones, "markers": r.markers}
-        for r in (await db.execute(
-            select(FloorPlan.id, FloorPlan.name, FloorPlan.zones, FloorPlan.markers)
-            .where(FloorPlan.tenant_id == tenant_id)
-        )).all()
-    ]
     return {
         "as_of": now,
         "active_window_sec": active_window_sec,
-        "zones": zones_occupancy(fps, per_camera),
+        "zones": zones_occupancy_from_tracks(fps, tracks),
     }
 
 
@@ -443,11 +448,12 @@ async def get_zone_dwell(
     """Per-named-person time-in-zone over ``[started_after, started_before)``.
 
     "Indoor geofencing": each track's lifetime on a camera is the person's dwell
-    in that camera's zone(s). We sum per (employee, zone), clipped to the window,
-    and flag anyone whose track is still active (``present``) so the UI can show
-    "here now". Zone binding is camera-in-polygon — identical to occupancy, so a
-    department-level camera gives department dwell and a desk-level camera gives
-    desk dwell. Pure aggregation lives in ``dwell.py``.
+    in the zone(s) they were in. We sum per (employee, zone), clipped to the
+    window, and flag anyone whose track is still active (``present``) so the UI
+    can show "here now". Zone attribution is desk-level for BEV-calibrated cameras
+    (foot-point in polygon) and camera-marker otherwise — so a department camera
+    gives department dwell and a calibrated multi-desk camera gives per-desk
+    dwell. Pure aggregation lives in ``dwell.py``.
     """
     now = datetime.now(UTC)
     active_cutoff = now - timedelta(seconds=active_window_sec)
@@ -457,7 +463,7 @@ async def get_zone_dwell(
     rows = (await db.execute(
         select(
             Track.id, Track.camera_id, Track.person_id,
-            Track.started_at, Track.ended_at, Track.updated_at,
+            Track.started_at, Track.ended_at, Track.updated_at, Track.last_bbox,
         ).where(
             Track.tenant_id == tenant_id,
             Track.started_at < started_before,
@@ -471,6 +477,10 @@ async def get_zone_dwell(
     best_by_track, best_by_person = await _best_identity_by_track(
         db, tenant_id=tenant_id, track_ids=track_ids, person_ids=person_ids
     )
+
+    # 3) Zone-resolution context (marker fallback + homography for desk-level).
+    fps, marker_zones, plan_zones, homographies = await _zone_resolution_context(
+        db, tenant_id=tenant_id)
 
     tracks: list[dict] = []
     for r in rows:
@@ -489,19 +499,12 @@ async def get_zone_dwell(
             "camera_id": str(r.camera_id),
             "emp_id": ident[0], "name": ident[1],
             "start": clipped[0], "end": clipped[1], "present": present,
+            "zones": resolve_track_zone_refs(
+                r.camera_id, r.last_bbox, homographies, marker_zones, plan_zones),
         })
 
-    # 3) Camera -> zones, then sum dwell per (person, zone).
-    fps = [
-        {"id": r.id, "name": r.name, "zones": r.zones, "markers": r.markers}
-        for r in (await db.execute(
-            select(FloorPlan.id, FloorPlan.name, FloorPlan.zones, FloorPlan.markers)
-            .where(FloorPlan.tenant_id == tenant_id)
-        )).all()
-    ]
-    cam_zones = camera_zone_index(fps)
     dwell_rows = [
-        row for row in accumulate_dwell(tracks, cam_zones)
+        row for row in accumulate_dwell(tracks)
         if row["seconds"] >= min_seconds
     ]
     return {
@@ -528,9 +531,10 @@ async def get_person_timeline(
     Same track->identity->zone pipeline as ``get_zone_dwell``, but for a single
     employee: each of their tracks becomes a per-zone presence segment (clipped
     to the window), then ``build_person_timeline`` merges same-zone fragments
-    into visits and orders them by time. ``total_seconds`` sums the visits (note:
-    if two cameras' zones overlap it can exceed wall-clock — it is time-in-zone,
-    not a wall-clock union).
+    into visits and orders them by time. Zone attribution is desk-level for
+    calibrated cameras (foot-point in polygon), camera-marker otherwise.
+    ``total_seconds`` sums the visits (note: if two cameras' zones overlap it can
+    exceed wall-clock — it is time-in-zone, not a wall-clock union).
     """
     now = datetime.now(UTC)
     active_cutoff = now - timedelta(seconds=active_window_sec)
@@ -538,7 +542,7 @@ async def get_person_timeline(
     rows = (await db.execute(
         select(
             Track.id, Track.camera_id, Track.person_id,
-            Track.started_at, Track.ended_at, Track.updated_at,
+            Track.started_at, Track.ended_at, Track.updated_at, Track.last_bbox,
         ).where(
             Track.tenant_id == tenant_id,
             Track.started_at < started_before,
@@ -552,15 +556,8 @@ async def get_person_timeline(
         db, tenant_id=tenant_id, track_ids=track_ids, person_ids=person_ids
     )
 
-    # Camera -> zones (same binding as dwell/occupancy).
-    fps = [
-        {"id": r.id, "name": r.name, "zones": r.zones, "markers": r.markers}
-        for r in (await db.execute(
-            select(FloorPlan.id, FloorPlan.name, FloorPlan.zones, FloorPlan.markers)
-            .where(FloorPlan.tenant_id == tenant_id)
-        )).all()
-    ]
-    cam_zones = camera_zone_index(fps)
+    fps, marker_zones, plan_zones, homographies = await _zone_resolution_context(
+        db, tenant_id=tenant_id)
 
     name: str | None = None
     segments: list[dict] = []
@@ -576,7 +573,8 @@ async def get_person_timeline(
         if clipped is None:
             continue
         present = r.ended_at is None and r.updated_at >= active_cutoff
-        for ref in cam_zones.get(str(r.camera_id), []):
+        for ref in resolve_track_zone_refs(
+                r.camera_id, r.last_bbox, homographies, marker_zones, plan_zones):
             segments.append({
                 "zone_id": ref["zone_id"],
                 "zone_name": ref["zone_name"],

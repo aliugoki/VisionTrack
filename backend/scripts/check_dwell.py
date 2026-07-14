@@ -200,6 +200,77 @@ async def main() -> None:
         _assert(len(merged["segments"]) == 1, "merge_gap=1h collapses to one Sales visit")
         _assert(merged["segments"][0]["sessions"] == 2, "merged visit records 2 sessions")
 
+        # ---- Desk-level precision: ONE calibrated camera covering two desks.
+        # A homography mapping 1000x1000 px -> 0..1 fractions; two people at
+        # different x land in different desk polygons (marker mode would lump both
+        # into Desk A, where the camera marker sits).
+        H_SCALE = [0.001, 0.0, 0.0, 0.0, 0.001, 0.0, 0.0, 0.0, 1.0]
+        t2 = Tenant(name="Desk Test Co", subdomain=f"desk-{uuid4().hex[:8]}")
+        db.add(t2)
+        await db.flush()
+        s2 = Site(tenant_id=t2.id, name="Office")
+        db.add(s2)
+        await db.flush()
+        dcam = Camera(tenant_id=t2.id, site_id=s2.id, name="Desk Cam",
+                      rtsp_url="rtsp://x/desk", mediamtx_path=f"d-{uuid4().hex[:6]}",
+                      calibration={"homography": H_SCALE})
+        db.add(dcam)
+        await db.flush()
+        desk_zones = [
+            {"id": str(uuid4()), "name": "Desk A", "rules": [],
+             "polygon": [{"x": 0.0, "y": 0.0}, {"x": 0.5, "y": 0.0},
+                         {"x": 0.5, "y": 1.0}, {"x": 0.0, "y": 1.0}]},
+            {"id": str(uuid4()), "name": "Desk B", "rules": [],
+             "polygon": [{"x": 0.5, "y": 0.0}, {"x": 1.0, "y": 0.0},
+                         {"x": 1.0, "y": 1.0}, {"x": 0.5, "y": 1.0}]},
+        ]
+        fp2 = FloorPlan(
+            tenant_id=t2.id, site_id=s2.id, name="Office Floor",
+            original_filename="o.png", original_content_type="image/png",
+            original_size_bytes=1, format="png", width_px=1000, height_px=1000,
+            storage_key_original="k",
+            markers=[{"camera_id": str(dcam.id), "x": 0.25, "y": 0.5}],  # marker in Desk A
+            zones=desk_zones)
+        db.add(fp2)
+        await db.flush()
+
+        def desk_track(bbox):
+            t = Track(tenant_id=t2.id, camera_id=dcam.id, tracker_id=1,
+                      started_at=now - timedelta(minutes=10), ended_at=None,
+                      first_bbox=bbox, last_bbox=bbox, point_count=1)
+            db.add(t)
+            return t
+        # Zed sits on the LEFT (foot x~0.25 -> Desk A); Yan on the RIGHT (x~0.75 -> Desk B).
+        z_tr = desk_track({"x1": 200, "y1": 700, "x2": 300, "y2": 900})
+        y_tr = desk_track({"x1": 700, "y1": 700, "x2": 800, "y2": 900})
+        await db.flush()
+        for tr in (z_tr, y_tr):
+            await db.execute(update(Track).where(Track.id == tr.id).values(
+                updated_at=now - timedelta(seconds=30)))
+        db.add(PersonIdentity(tenant_id=t2.id, track_id=z_tr.id, camera_id=dcam.id,
+                              emp_id="E9", name="Zed", votes=5, confidence=0.9, source="face"))
+        db.add(PersonIdentity(tenant_id=t2.id, track_id=y_tr.id, camera_id=dcam.id,
+                              emp_id="E8", name="Yan", votes=5, confidence=0.9, source="face"))
+        await db.commit()
+
+        desk = await get_zone_dwell(
+            db, tenant_id=t2.id,
+            started_after=now - timedelta(hours=1), started_before=now + timedelta(hours=1),
+        )
+        dmap = {(r["emp_id"], r["zone_name"]) for r in desk["rows"]}
+        print("\nDesk-level (one calibrated camera, two desks):")
+        for r in desk["rows"]:
+            print(f"  {r['name']:<5} -> {r['zone_name']}")
+        _assert(("E9", "Desk A") in dmap, "Zed (left) attributed to Desk A")
+        _assert(("E8", "Desk B") in dmap, "Yan (right) attributed to Desk B")
+        _assert(("E9", "Desk B") not in dmap and ("E8", "Desk A") not in dmap,
+                "same camera, different desks — not lumped by camera marker")
+
+        for tbl in (PersonIdentity, Track, FloorPlan, Camera, Site):
+            await db.execute(delete(tbl).where(tbl.tenant_id == t2.id))
+        await db.execute(delete(Tenant).where(Tenant.id == t2.id))
+        await db.commit()
+
         # Cleanup so a shared DB stays tidy (throwaway DBs don't need this).
         await db.execute(delete(PersonIdentity).where(PersonIdentity.tenant_id == tenant.id))
         await db.execute(delete(Track).where(Track.tenant_id == tenant.id))

@@ -87,3 +87,57 @@ def zones_occupancy(
                 "known_people": people,
             })
     return out
+
+
+def zones_occupancy_from_tracks(
+    floor_plans: Iterable[dict[str, Any]],
+    tracks: Iterable[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Per-zone headcount (known/unknown) from tracks that already carry their
+    resolved zone refs — the position-aware (desk-level) counterpart to
+    ``zones_occupancy``.
+
+    Each track: ``{"camera_id", "emp_id" | None, "name" | None,
+    "zones": [{floor_plan_id, floor_plan_name, zone_id, zone_name}]}``. Zone
+    membership comes from ``zone_resolve.resolve_track_zone_refs`` (foot-point in
+    polygon for calibrated cameras, camera-marker otherwise), so several desks in
+    one camera view are counted separately.
+
+    Every zone on every floor plan is returned (headcount 0 when empty) so the UI
+    shows the full set of zones, matching ``zones_occupancy``.
+    """
+    rows: dict[tuple[str, str], dict[str, Any]] = {}
+    for fp in floor_plans:
+        for z in fp.get("zones") or []:
+            polygon = z.get("polygon") or []
+            if len(polygon) < 3:
+                continue
+            key = (str(fp["id"]), str(z.get("id")))
+            rows[key] = {
+                "floor_plan_id": str(fp["id"]),
+                "floor_plan_name": fp.get("name"),
+                "zone_id": str(z.get("id")),
+                "zone_name": z.get("name", "Zone"),
+                "_cameras": set(),
+                "total": 0, "known": 0, "unknown": 0, "known_people": [],
+            }
+
+    for t in tracks:
+        for ref in t.get("zones") or []:
+            r = rows.get((ref["floor_plan_id"], ref["zone_id"]))
+            if r is None:
+                continue
+            r["total"] += 1
+            if t.get("emp_id"):
+                r["known"] += 1
+                r["known_people"].append({"emp_id": str(t["emp_id"]), "name": t.get("name")})
+            else:
+                r["unknown"] += 1
+            if t.get("camera_id") is not None:
+                r["_cameras"].add(str(t["camera_id"]))
+
+    out: list[dict[str, Any]] = []
+    for r in rows.values():
+        r["camera_ids"] = sorted(r.pop("_cameras"))
+        out.append(r)
+    return out
