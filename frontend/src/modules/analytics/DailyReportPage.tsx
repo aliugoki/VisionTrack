@@ -335,6 +335,24 @@ export default function DailyReportPage() {
         <p className="text-sm text-gray-600">{t('analytics.report.noData')}</p>
       ) : (
         <>
+          {/* Headline KPIs */}
+          <section className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Kpi label={t('analytics.report.kpi.employees')} value={String(attRows.length)} />
+            <Kpi
+              label={t('analytics.report.kpi.trackedTotal')}
+              value={fmtDuration(attRows.reduce((s, a) => s + a.tracked_seconds, 0))}
+            />
+            <Kpi
+              label={t('analytics.report.kpi.present')}
+              value={String(attRows.filter((a) => a.present).length)}
+            />
+            <Kpi
+              label={t('analytics.report.kpi.busiestZone')}
+              value={rollupRows[0]?.zone_name || '—'}
+              sub={rollupRows[0] ? fmtDuration(rollupRows[0].total_seconds) : undefined}
+            />
+          </section>
+
           {/* Attendance summary */}
           {attRows.length > 0 && (
             <section className="mb-8">
@@ -464,6 +482,16 @@ export default function DailyReportPage() {
           </section>
         </>
       )}
+    </div>
+  );
+}
+
+function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="break-inside-avoid rounded-md border border-gray-300 p-3">
+      <div className="text-xs uppercase tracking-wide text-gray-500">{label}</div>
+      <div className="mt-1 truncate text-xl font-bold tabular-nums">{value}</div>
+      {sub && <div className="text-xs text-gray-500">{sub}</div>}
     </div>
   );
 }

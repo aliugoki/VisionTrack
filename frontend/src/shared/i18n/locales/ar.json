@@ -716,6 +716,12 @@
       "print": "طباعة / حفظ PDF",
       "printReport": "طباعة التقرير",
       "summaryHeading": "الوقت في المناطق",
+      "kpi": {
+        "employees": "الموظفون",
+        "trackedTotal": "إجمالي المتتبَّع",
+        "present": "متواجدون الآن",
+        "busiestZone": "أكثر منطقة ازدحاماً"
+      },
       "attendanceHeading": "الحضور",
       "attendanceCsv": "CSV الحضور",
       "dwellCsv": "CSV المكوث",

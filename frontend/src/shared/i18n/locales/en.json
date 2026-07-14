@@ -716,6 +716,12 @@
       "print": "Print / Save as PDF",
       "printReport": "Print report",
       "summaryHeading": "Time in zones",
+      "kpi": {
+        "employees": "Employees",
+        "trackedTotal": "Tracked total",
+        "present": "Present now",
+        "busiestZone": "Busiest zone"
+      },
       "attendanceHeading": "Attendance",
       "attendanceCsv": "Attendance CSV",
       "dwellCsv": "Dwell CSV",
