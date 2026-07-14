@@ -11,6 +11,7 @@ import {
   Play,
   Disc,
   MapPin,
+  Crosshair,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/shared/lib/cn';
@@ -29,6 +30,7 @@ import {
 } from '@/shared/lib/permissions';
 import { useCameras, useDeleteCamera } from '@/modules/cameras/api';
 import { CameraFormDialog } from '@/modules/cameras/CameraFormDialog';
+import { CameraCalibrationDialog } from '@/modules/cameras/CameraCalibrationDialog';
 import { CameraLivePlayer } from '@/modules/cameras/CameraLivePlayer';
 import { CameraActivityPanel } from '@/modules/cameras/CameraActivityPanel';
 import { useTrackEventStream } from '@/modules/tracks/useTrackEvents';
@@ -52,6 +54,7 @@ export default function CamerasPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingCamera, setEditingCamera] = useState<Camera | undefined>();
   const [previewingCamera, setPreviewingCamera] = useState<Camera | null>(null);
+  const [calibratingCamera, setCalibratingCamera] = useState<Camera | null>(null);
   const [deletingCamera, setDeletingCamera] = useState<Camera | null>(null);
 
   const { data: cameras, isLoading } = useCameras({ search: search || undefined });
@@ -170,6 +173,7 @@ export default function CamerasPage() {
               }}
               onPreview={() => setPreviewingCamera(c)}
               onEdit={() => openEdit(c)}
+              onCalibrate={() => setCalibratingCamera(c)}
               onDelete={() => setDeletingCamera(c)}
             />
           ))}
@@ -182,6 +186,15 @@ export default function CamerasPage() {
         onOpenChange={setFormOpen}
         camera={editingCamera}
       />
+
+      {/* Calibration dialog */}
+      {calibratingCamera && (
+        <CameraCalibrationDialog
+          camera={calibratingCamera}
+          open={!!calibratingCamera}
+          onOpenChange={(o) => !o && setCalibratingCamera(null)}
+        />
+      )}
 
       {/* Live preview dialog */}
       <Dialog
@@ -252,6 +265,7 @@ function CameraCard({
   cardRef,
   onPreview,
   onEdit,
+  onCalibrate,
   onDelete,
 }: {
   camera: Camera;
@@ -262,6 +276,7 @@ function CameraCard({
   cardRef?: (el: HTMLDivElement | null) => void;
   onPreview: () => void;
   onEdit: () => void;
+  onCalibrate: () => void;
   onDelete: () => void;
 }) {
   const { t } = useTranslation();
@@ -355,6 +370,19 @@ function CameraCard({
                       >
                         <Pencil className="h-4 w-4" />
                         {t('common.edit')}
+                      </button>
+                    )}
+                    {canUpdate && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          onCalibrate();
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-sm text-foreground hover:bg-muted"
+                      >
+                        <Crosshair className="h-4 w-4" />
+                        {t('cameras.calibration.action')}
                       </button>
                     )}
                     {canDelete && (
