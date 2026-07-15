@@ -30,9 +30,13 @@ from uuid import UUID
 from sqlalchemy import and_, distinct, func, or_, select, text, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from zoneinfo import ZoneInfo
+
 from app.modules.alerts.models import Alert
 from app.modules.analytics.attendance import attendance_from_dwell
+from app.modules.analytics.heatmap import hour_of_day_heatmap
 from app.modules.analytics.zone_report import zone_rollup_from_dwell
+from app.modules.tenants.models import Tenant
 from app.modules.analytics.dwell import (
     accumulate_dwell,
     build_person_timeline,
@@ -682,6 +686,82 @@ async def get_zone_rollup(
         "from": dwell["from"],
         "to": dwell["to"],
         "rows": zone_rollup_from_dwell(dwell["rows"]),
+    }
+
+
+async def get_occupancy_heatmap(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    started_after: datetime,
+    started_before: datetime,
+    active_window_sec: int = 60,
+    emp_id: str | None = None,
+    zone_id: str | None = None,
+) -> dict:
+    """Hour-of-day occupancy heatmap — per zone, person-time + distinct people in
+    each of the 24 hours (tenant-local), aggregated across the range. Uses the
+    same track->zone resolution as dwell (so it agrees), then buckets by hour."""
+    now = datetime.now(UTC)
+    active_cutoff = now - timedelta(seconds=active_window_sec)
+
+    rows = (await db.execute(
+        select(
+            Track.id, Track.camera_id, Track.person_id,
+            Track.started_at, Track.ended_at, Track.updated_at, Track.last_bbox,
+        ).where(
+            Track.tenant_id == tenant_id,
+            Track.started_at < started_before,
+            or_(Track.ended_at.is_(None), Track.ended_at >= started_after),
+        )
+    )).all()
+
+    best_by_track, best_by_person = await _best_identity_by_track(
+        db, tenant_id=tenant_id,
+        track_ids=[r.id for r in rows],
+        person_ids=[r.person_id for r in rows if r.person_id is not None],
+    )
+    _fps, marker_zones, plan_zones, homographies = await _zone_resolution_context(
+        db, tenant_id=tenant_id)
+    resolved = await _resolve_tracks_with_zones(
+        db, tenant_id=tenant_id, rows=rows,
+        best_by_track=best_by_track, best_by_person=best_by_person,
+        marker_zones=marker_zones, plan_zones=plan_zones, homographies=homographies,
+        started_after=started_after, started_before=started_before,
+        active_cutoff=active_cutoff, only_emp=emp_id)
+
+    # Flatten to zone-presence segments.
+    presence: list[dict] = []
+    for rec in resolved:
+        if "intervals" in rec:
+            for iv in rec["intervals"]:
+                presence.append({**iv, "emp_id": rec["emp_id"]})
+        else:
+            for ref in rec["zones"]:
+                presence.append({
+                    "zone_id": ref["zone_id"], "zone_name": ref["zone_name"],
+                    "floor_plan_id": ref["floor_plan_id"],
+                    "floor_plan_name": ref["floor_plan_name"],
+                    "start": rec["start"], "end": rec["end"], "emp_id": rec["emp_id"],
+                })
+    if zone_id:
+        presence = [p for p in presence if p["zone_id"] == zone_id]
+
+    # Tenant timezone for local hour-of-day bucketing (fallback UTC).
+    tz_name = (await db.execute(
+        select(Tenant.timezone).where(Tenant.id == tenant_id)
+    )).scalar_one_or_none() or "UTC"
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:
+        tz = UTC
+
+    return {
+        "as_of": now,
+        "from": started_after,
+        "to": started_before,
+        "timezone": tz_name,
+        "zones": hour_of_day_heatmap(presence, tz),
     }
 
 

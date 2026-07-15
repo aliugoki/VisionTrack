@@ -8,6 +8,7 @@ import type {
   OverviewKPIs,
   PersonTimelineResponse,
   TimeseriesResponse,
+  OccupancyHeatmapResponse,
   ZoneDwellResponse,
   ZoneOccupancyResponse,
   ZoneRollupResponse,
@@ -275,6 +276,45 @@ export async function downloadZoneRollupCsv(filters: DwellFilters = {}): Promise
     },
   });
   triggerDownload(data, `zone-rollup-${todayStamp()}.csv`);
+}
+
+/** Hour-of-day occupancy heatmap (per zone, person-time + people per hour). */
+export function useOccupancyHeatmap(filters: DwellFilters = {}) {
+  return useQuery({
+    queryKey: [
+      'analytics',
+      'heatmap',
+      filters.from ?? null,
+      filters.to ?? null,
+      filters.empId ?? null,
+      filters.zoneId ?? null,
+    ] as const,
+    queryFn: async () => {
+      const { data } = await api.get<OccupancyHeatmapResponse>('/analytics/zones/heatmap', {
+        params: {
+          from: filters.from,
+          to: filters.to,
+          emp_id: filters.empId,
+          zone_id: filters.zoneId,
+        },
+      });
+      return data;
+    },
+  });
+}
+
+/** Download the hour-of-day occupancy heatmap as CSV. */
+export async function downloadHeatmapCsv(filters: DwellFilters = {}): Promise<void> {
+  const { data } = await api.get<Blob>('/analytics/zones/heatmap.csv', {
+    responseType: 'blob',
+    params: {
+      from: filters.from,
+      to: filters.to,
+      emp_id: filters.empId,
+      zone_id: filters.zoneId,
+    },
+  });
+  triggerDownload(data, `occupancy-heatmap-${todayStamp()}.csv`);
 }
 
 // "Where was X today" — one employee's chronological zone-visit timeline.

@@ -8,11 +8,14 @@ import {
   useZoneDwell,
   useAttendance,
   useZoneRollup,
+  useOccupancyHeatmap,
   usePersonTimeline,
   downloadDwellCsv,
   downloadAttendanceCsv,
   downloadZoneRollupCsv,
+  downloadHeatmapCsv,
 } from '@/modules/analytics/api';
+import type { ZoneHeatmapRow } from '@/modules/analytics/types';
 
 /**
  * Print-friendly zone report — a bare, chrome-less route (mounted outside
@@ -124,6 +127,8 @@ export default function DailyReportPage() {
   const attRows = att?.rows ?? [];
   const { data: rollup } = useZoneRollup(attFilters);
   const rollupRows = rollup?.rows ?? [];
+  const { data: heatmap } = useOccupancyHeatmap(attFilters);
+  const heatmapZones = heatmap?.zones ?? [];
 
   function setFilter(key: string, value: string) {
     const next = new URLSearchParams(params);
@@ -227,6 +232,16 @@ export default function DailyReportPage() {
           >
             <Download className="h-4 w-4" />
             {t('analytics.report.zoneCsv')}
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              downloadHeatmapCsv(attFilters).catch(() => toast.error(t('common.exportFailed')))
+            }
+            className="flex items-center gap-1.5 rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+          >
+            <Download className="h-4 w-4" />
+            {t('analytics.report.heatmapCsv')}
           </button>
           <button
             type="button"
@@ -465,6 +480,20 @@ export default function DailyReportPage() {
             </section>
           )}
 
+          {heatmapZones.length > 0 && (
+            <section className="mb-8">
+              <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
+                {t('analytics.report.heatmapHeading')}
+                {heatmap?.timezone && (
+                  <span className="ml-2 font-normal normal-case text-gray-400">
+                    ({heatmap.timezone})
+                  </span>
+                )}
+              </h2>
+              <OccupancyHeatmap zones={heatmapZones} />
+            </section>
+          )}
+
           <section>
             <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-gray-500">
               {t('analytics.report.movementHeading')}
@@ -482,6 +511,56 @@ export default function DailyReportPage() {
           </section>
         </>
       )}
+    </div>
+  );
+}
+
+function OccupancyHeatmap({ zones }: { zones: ZoneHeatmapRow[] }) {
+  const { t } = useTranslation();
+  const max = Math.max(1, ...zones.flatMap((z) => z.cells.map((c) => c.seconds)));
+  const hours = Array.from({ length: 24 }, (_, h) => h);
+  const cellStyle = { printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact' } as const;
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="border-collapse text-[10px]">
+        <thead>
+          <tr>
+            <th className="pr-2" />
+            {hours.map((h) => (
+              <th key={h} className="w-5 pb-1 text-center font-normal text-gray-400">
+                {h % 3 === 0 ? String(h).padStart(2, '0') : ''}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {zones.map((z) => {
+            const byHour = new Map(z.cells.map((c) => [c.hour, c]));
+            return (
+              <tr key={z.zone_id}>
+                <td className="whitespace-nowrap pr-2 text-xs font-medium">{z.zone_name}</td>
+                {hours.map((h) => {
+                  const c = byHour.get(h);
+                  const secs = c?.seconds ?? 0;
+                  const intensity = secs > 0 ? 0.12 + 0.88 * (secs / max) : 0;
+                  return (
+                    <td
+                      key={h}
+                      title={`${z.zone_name} · ${String(h).padStart(2, '0')}:00 — ${Math.round(secs / 60)} min · ${c?.people ?? 0} people`}
+                      className="h-5 w-5 border border-white text-center align-middle"
+                      style={{ ...cellStyle, backgroundColor: `rgba(16,185,129,${intensity})` }}
+                    >
+                      {c && c.people > 0 ? <span className="text-gray-700">{c.people}</span> : ''}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <p className="mt-1 text-[10px] text-gray-400">{t('analytics.report.heatmapLegend')}</p>
     </div>
   );
 }

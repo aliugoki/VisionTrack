@@ -202,3 +202,28 @@ class ZoneRollupResponse(BaseModel):
     rows: list[ZoneRollupRow]
 
     model_config = {"populate_by_name": True}
+
+
+class HeatmapCell(BaseModel):
+    hour: int              # 0..23 (tenant-local)
+    seconds: float         # person-time in this zone during this hour
+    people: int            # distinct employees this hour
+
+
+class ZoneHeatmapRow(BaseModel):
+    zone_id: str
+    zone_name: str
+    floor_plan_id: str | None = None
+    floor_plan_name: str | None = None
+    cells: list[HeatmapCell]   # length 24
+    total_seconds: float
+
+
+class OccupancyHeatmapResponse(BaseModel):
+    as_of: datetime
+    from_: datetime = Field(alias="from")
+    to: datetime
+    timezone: str
+    zones: list[ZoneHeatmapRow]
+
+    model_config = {"populate_by_name": True}

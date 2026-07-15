@@ -111,6 +111,7 @@ them for "today". Every reporting endpoint accepts the same **filters**:
 | `GET /zones/dwell` · `dwell.csv` | Per (employee, zone) time, visits, first/last seen, present. |
 | `GET /zones/rollup` · `rollup.csv` | Per zone: total time, distinct people, avg, present. |
 | `GET /attendance` · `attendance.csv` | Per employee: arrival, departure, on-site span, tracked time, zones. |
+| `GET /zones/heatmap` · `heatmap.csv` | Hour-of-day occupancy per zone (person-time + distinct people in each of the 24 tenant-local hours). |
 | `GET /persons/{emp_id}/timeline` · `timeline.csv` | One employee's chronological zone visits. |
 
 `attendance` and `zones/rollup` are **rollups of `get_zone_dwell`**, so all
@@ -156,8 +157,10 @@ projection to ~1e-16.
 
 **Route:** `/reports/daily` — a bare, chrome-less page (opened in a new tab from
 the dwell panel's **Print report** button). It renders a clean white document
-with four sections: **Attendance**, **Time in zones**, **By zone**, and
-**Movement timelines** (one per employee).
+with headline KPI tiles then sections: **Attendance**, **Time in zones**,
+**By zone**, **Occupancy by hour** (a per-zone × 24-hour heatmap, shaded by
+person-time and labelled with distinct people — bucketed in the tenant timezone,
+aggregated across the range), and **Movement timelines** (one per employee).
 
 **Filters** (screen-only bar; hidden in print) live in the URL so a filtered
 report is shareable/bookmarkable:
@@ -203,6 +206,7 @@ marker mode.
 | `occupancy.py` | pure — `zones_occupancy`, `zones_occupancy_from_tracks` |
 | `attendance.py` | pure — `attendance_from_dwell` |
 | `zone_report.py` | pure — `zone_rollup_from_dwell` |
+| `heatmap.py` | pure — `hour_of_day_heatmap` (local-hour bucketing) |
 | `export.py` | pure — CSV formatters (`dwell_csv`, `attendance_csv`, `zone_rollup_csv`, `timeline_csv`) |
 | `service.py` | async DB glue — `get_zone_occupancy/dwell/rollup`, `get_attendance`, `get_person_timeline`, shared `_zone_resolution_context` + `_resolve_tracks_with_zones` |
 | `router.py` | HTTP endpoints (JSON + `.csv`) |

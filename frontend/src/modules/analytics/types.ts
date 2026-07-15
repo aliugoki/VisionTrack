@@ -152,3 +152,26 @@ export interface ZoneRollupResponse {
   to: string;
   rows: ZoneRollupRow[];
 }
+
+export interface HeatmapCell {
+  hour: number; // 0..23 tenant-local
+  seconds: number; // person-time this hour
+  people: number; // distinct employees this hour
+}
+
+export interface ZoneHeatmapRow {
+  zone_id: string;
+  zone_name: string;
+  floor_plan_id: string | null;
+  floor_plan_name: string | null;
+  cells: HeatmapCell[]; // length 24
+  total_seconds: number;
+}
+
+export interface OccupancyHeatmapResponse {
+  as_of: string;
+  from: string;
+  to: string;
+  timezone: string;
+  zones: ZoneHeatmapRow[];
+}

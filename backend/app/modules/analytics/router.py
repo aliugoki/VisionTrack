@@ -28,12 +28,14 @@ from app.modules.analytics import service
 from app.modules.analytics.export import (
     attendance_csv,
     dwell_csv,
+    heatmap_csv,
     timeline_csv,
     zone_rollup_csv,
 )
 from app.modules.analytics.schemas import (
     AlertsBreakdownResponse,
     AttendanceResponse,
+    OccupancyHeatmapResponse,
     OverviewKPIs,
     PersonsSummary,
     PersonTimelineResponse,
@@ -46,6 +48,7 @@ from app.modules.analytics.service import (
     get_alerts_breakdown,
     get_alerts_timeseries,
     get_attendance,
+    get_occupancy_heatmap,
     get_overview,
     get_people_timeseries,
     get_person_timeline,
@@ -283,6 +286,46 @@ async def zones_rollup_csv(
         emp_id=emp_id, zone_id=zone_id,
     )
     return _csv_response(zone_rollup_csv(data), f"zone-rollup-{start.date()}.csv")
+
+
+@router.get("/zones/heatmap", response_model=OccupancyHeatmapResponse)
+async def zones_heatmap_endpoint(
+    from_: datetime | None = Query(None, alias="from"),
+    to_: datetime | None = Query(None, alias="to"),
+    window: int = Query(60, ge=5, le=600),
+    emp_id: str | None = Query(None),
+    zone_id: str | None = Query(None),
+    current_user: User = Depends(RequirePermission(ANALYTICS_READ)),
+    db: Annotated[AsyncSession, Depends(get_db)] = ...,
+) -> OccupancyHeatmapResponse:
+    """Hour-of-day occupancy heatmap — per zone, person-time + people per hour."""
+    start, end = _daily_range(from_, to_)
+    data = await get_occupancy_heatmap(
+        db, tenant_id=current_user.tenant_id,
+        started_after=start, started_before=end,
+        active_window_sec=window, emp_id=emp_id, zone_id=zone_id,
+    )
+    return OccupancyHeatmapResponse(**data)
+
+
+@router.get("/zones/heatmap.csv")
+async def zones_heatmap_csv(
+    from_: datetime | None = Query(None, alias="from"),
+    to_: datetime | None = Query(None, alias="to"),
+    window: int = Query(60, ge=5, le=600),
+    emp_id: str | None = Query(None),
+    zone_id: str | None = Query(None),
+    current_user: User = Depends(RequirePermission(ANALYTICS_READ)),
+    db: Annotated[AsyncSession, Depends(get_db)] = ...,
+) -> Response:
+    """Download the hour-of-day occupancy heatmap as CSV."""
+    start, end = _daily_range(from_, to_)
+    data = await get_occupancy_heatmap(
+        db, tenant_id=current_user.tenant_id,
+        started_after=start, started_before=end,
+        active_window_sec=window, emp_id=emp_id, zone_id=zone_id,
+    )
+    return _csv_response(heatmap_csv(data), f"occupancy-heatmap-{start.date()}.csv")
 
 
 @router.get("/attendance", response_model=AttendanceResponse)

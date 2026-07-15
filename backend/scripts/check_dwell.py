@@ -24,6 +24,7 @@ from app.core.db import AsyncSessionLocal
 from app.modules.analytics.export import dwell_csv, timeline_csv
 from app.modules.analytics.service import (
     get_attendance,
+    get_occupancy_heatmap,
     get_person_timeline,
     get_zone_dwell,
     get_zone_rollup,
@@ -271,6 +272,19 @@ async def main() -> None:
                 "Sales: 1 person, 1 present")
         _assert(rmap["Production"]["total_seconds"] == 2400 and rmap["Production"]["present_count"] == 0,
                 "Production: 2400s, 0 present")
+
+        # ---- Hour-of-day occupancy heatmap.
+        hm = await get_occupancy_heatmap(
+            db, tenant_id=tenant.id,
+            started_after=now - timedelta(hours=3), started_before=now + timedelta(hours=1))
+        hmap = {z["zone_name"]: z for z in hm["zones"]}
+        print("\nHeatmap zones:", [(z["zone_name"], int(z["total_seconds"])//60) for z in hm["zones"]])
+        _assert(set(hmap) == {"Sales", "Production"}, "heatmap has Sales + Production")
+        _assert(all(len(z["cells"]) == 24 for z in hm["zones"]), "each zone has 24 hour cells")
+        _assert(hmap["Sales"]["total_seconds"] == 2970, "Sales heatmap total = 2970s (matches dwell)")
+        _assert(hmap["Production"]["total_seconds"] == 2400, "Production heatmap total = 2400s")
+        _assert(sum(c["seconds"] for c in hmap["Sales"]["cells"]) == 2970,
+                "Sales cells sum to the total")
 
         # ---- Desk-level precision: ONE calibrated camera covering two desks.
         # A homography mapping 1000x1000 px -> 0..1 fractions; two people at

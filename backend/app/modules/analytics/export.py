@@ -76,6 +76,20 @@ def attendance_csv(data: dict) -> str:
     return buf.getvalue()
 
 
+def heatmap_csv(data: dict) -> str:
+    """CSV of ``get_occupancy_heatmap``: one row per zone, 24 hour columns of
+    person-minutes (rounded), plus a total."""
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["zone", "floor_plan"] + [f"{h:02d}:00" for h in range(24)] + ["total_min"])
+    for z in data.get("rows", data.get("zones", [])):
+        cells = {c["hour"]: c for c in z.get("cells", [])}
+        mins = [int(round(cells.get(h, {}).get("seconds", 0) / 60)) for h in range(24)]
+        w.writerow([_safe(z.get("zone_name")), _safe(z.get("floor_plan_name"))]
+                   + mins + [int(round(z.get("total_seconds", 0) / 60))])
+    return buf.getvalue()
+
+
 def zone_rollup_csv(data: dict) -> str:
     """CSV of ``get_zone_rollup`` output: one row per zone."""
     buf = io.StringIO()
