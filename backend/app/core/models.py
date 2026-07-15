@@ -24,3 +24,4 @@ from app.modules.alerts import models as _alerts  # noqa: F401
 from app.modules.persons import models as _persons  # noqa: F401
 from app.modules.mv3dt import models as _mv3dt  # noqa: F401
 from app.modules.employees import models as _employees  # noqa: F401
+from app.modules.companies import models as _companies  # noqa: F401

@@ -8,6 +8,7 @@ import {
   Video,
   Shapes,
   Users,
+  Building2,
   Bell,
   Clapperboard,
   BarChart3,
@@ -78,6 +79,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     labelKey: 'nav.administration',
     items: [
+      { to: '/companies', labelKey: 'nav.companies', icon: Building2, permission: TENANT_READ },
       { to: '/users', labelKey: 'nav.users', icon: UserCog, permission: USER_READ },
       { to: '/roles', labelKey: 'nav.roles', icon: ShieldCheck, permission: ROLE_READ },
       { to: '/settings', labelKey: 'nav.settings', icon: Settings, permission: TENANT_READ },

@@ -20,6 +20,7 @@ import AnalyticsPage from "@/modules/analytics/AnalyticsPage";
 import DailyReportPage from "@/modules/analytics/DailyReportPage";
 import EmployeesPage from "@/modules/employees/EmployeesPage";
 import ZonesPage from "@/modules/zones/ZonesPage";
+import CompaniesPage from "@/modules/companies/CompaniesPage";
 import PersonsPage from "@/modules/persons/PersonsPage";
 import PersonDetailPage from "@/modules/persons/PersonDetailPage";
 import BEVTrackingPage from "@/modules/bev/BEVTrackingPage";
@@ -69,6 +70,7 @@ export default function App() {
           <Route path="calibration" element={<CameraCalibrationPage />} />
           <Route path="zones" element={<ZonesPage />} />
           <Route path="employees" element={<EmployeesPage />} />
+          <Route path="companies" element={<CompaniesPage />} />
           <Route path="alerts" element={<AlertsPage />} />
           <Route path="recordings" element={<RecordingsPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
