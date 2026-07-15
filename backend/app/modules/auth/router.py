@@ -136,6 +136,17 @@ async def _authenticate(
     if not user.is_active or not verify_password(password, user.password_hash):
         raise invalid
 
+    # Suspended company account: block login. (A platform admin can still ENTER
+    # the tenant via /platform to manage or reactivate it.)
+    tenant_active = (await db.execute(
+        select(Tenant.is_active).where(Tenant.id == user.tenant_id)
+    )).scalar_one_or_none()
+    if tenant_active is False:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This company account is suspended. Contact your administrator.",
+        )
+
     return user
 
 

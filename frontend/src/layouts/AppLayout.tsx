@@ -46,6 +46,7 @@ interface NavItem {
   labelKey: string;
   icon: React.ComponentType<{ className?: string }>;
   permission?: string;
+  platformOnly?: boolean;
 }
 
 interface NavGroup {
@@ -80,6 +81,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     labelKey: 'nav.administration',
     items: [
+      { to: '/platform/tenants', labelKey: 'nav.platformTenants', icon: Building2, platformOnly: true },
       { to: '/companies', labelKey: 'nav.companies', icon: Building2, permission: TENANT_READ },
       { to: '/users', labelKey: 'nav.users', icon: UserCog, permission: USER_READ },
       { to: '/roles', labelKey: 'nav.roles', icon: ShieldCheck, permission: ROLE_READ },
@@ -100,7 +102,11 @@ export function AppLayout() {
     () =>
       NAV_GROUPS.map((group) => ({
         ...group,
-        items: group.items.filter((it) => !it.permission || hasPermission(it.permission)),
+        items: group.items.filter(
+          (it) =>
+            (!it.permission || hasPermission(it.permission)) &&
+            (!it.platformOnly || !!user?.is_platform_admin),
+        ),
       })).filter((g) => g.items.length > 0),
     [hasPermission, user]
   );

@@ -133,6 +133,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log.warning("app.alerts_bridge_failed", error=str(e))
 
+    # Auto-provision a tenant for any company that lacks one (multi-tenant Phase 4).
+    try:
+        from app.modules.tenants.auto_provision import auto_provisioner
+        await auto_provisioner.start()
+    except Exception as e:
+        log.warning("app.auto_provision_failed", error=str(e))
+
     log.info("app.ready")
 
     yield
@@ -169,6 +176,11 @@ async def lifespan(app: FastAPI):
 
     try:
         from app.modules.alerts.realtime_bridge import alerts_realtime_bridge
+        from app.modules.tenants.auto_provision import auto_provisioner
+        await auto_provisioner.stop()
+    except Exception as e:
+        log.warning("app.auto_provision_stop_failed", error=str(e))
+    try:
         await alerts_realtime_bridge.stop()
     except Exception as e:
         log.warning("app.alerts_bridge_stop_failed", error=str(e))

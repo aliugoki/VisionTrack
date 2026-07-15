@@ -90,7 +90,7 @@ a superuser flag that bypasses the tenant filter.
 | **1** | `tenants.external_company_id` + company→tenant provisioning + backfill | **done** |
 | **2** | Platform super-admin: platform role, `GET /platform/tenants`, tenant-switch token, switcher UI | **done** |
 | **3** | Tenant-aware bridges: employee sync per tenant, face-identity company→tenant map | **done** |
-| **4** | Lifecycle: auto-provision on new company, suspend, cascade delete, per-tenant settings | planned |
+| **4** | Lifecycle: auto-provision on new company, suspend, cascade delete, per-tenant settings | **done** |
 | **5** | Hardening: cross-tenant leakage tests, quotas, audit, docs | planned |
 
 ## 8. Key decisions
@@ -149,6 +149,24 @@ tenant admins are 403 on `/platform/*`.
 Remaining for live recognition: FaceTrack must publish to
 `vt:face:identities:<company_id>` and VisionTrack must be running live tracking
 so events correlate to tracks. The VisionTrack side is ready.
+
+## 8e. Phase 4 — delivered
+
+- **Suspend / activate**: `PATCH /platform/tenants/{id}` (is_active, name, timezone,
+  plan, retention). Login enforces `tenant.is_active` — a suspended company's users
+  are blocked (403), but a platform admin can still **enter** it to manage/reactivate.
+- **Cascade delete**: `DELETE /platform/tenants/{id}` removes the tenant + all its
+  data (track_points hypertable deleted explicitly; everything else via ON DELETE
+  CASCADE). Guards: not your own tenant (400), must be suspended first (409).
+- **Auto-provision**: a lifespan background task provisions a tenant for any
+  company lacking one (startup + every 5 min) — new synced/created companies get
+  their tenant automatically.
+- **Frontend**: a platform-admin-only **Tenants** page (enter / suspend / activate /
+  configure / delete) + nav item; the sidebar switcher from Phase 2 remains.
+
+Verified live: suspend blocks a company login (403) while platform-enter still
+works; delete guards return 400/409; a full cascade-delete of a suspended tenant
+removed all its data, then auto-provision + re-sync restored it.
 
 ## 9. Recommendation
 
