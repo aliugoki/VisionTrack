@@ -18,11 +18,12 @@ import UsersListPage from "@/modules/users/UsersListPage";
 import RolesListPage from "@/modules/roles/RolesListPage";
 import AnalyticsPage from "@/modules/analytics/AnalyticsPage";
 import DailyReportPage from "@/modules/analytics/DailyReportPage";
+import EmployeesPage from "@/modules/employees/EmployeesPage";
+import ZonesPage from "@/modules/zones/ZonesPage";
 import PersonsPage from "@/modules/persons/PersonsPage";
 import PersonDetailPage from "@/modules/persons/PersonDetailPage";
 import BEVTrackingPage from "@/modules/bev/BEVTrackingPage";
 import CameraCalibrationPage from "@/modules/bev/CameraCalibrationPage";
-import ModulePlaceholder from '@/shared/components/ModulePlaceholder';
 
 function ProtectedRoute() {
   const { accessToken } = useAuth();
@@ -66,8 +67,8 @@ export default function App() {
           <Route path="persons/:personId" element={<PersonDetailPage />} />
           <Route path="bev" element={<BEVTrackingPage />} />
           <Route path="calibration" element={<CameraCalibrationPage />} />
-          <Route path="zones" element={<ModulePlaceholder name="Zones" />} />
-          <Route path="employees" element={<ModulePlaceholder name="Employees" />} />
+          <Route path="zones" element={<ZonesPage />} />
+          <Route path="employees" element={<EmployeesPage />} />
           <Route path="alerts" element={<AlertsPage />} />
           <Route path="recordings" element={<RecordingsPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />

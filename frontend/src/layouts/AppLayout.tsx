@@ -11,6 +11,7 @@ import {
   Bell,
   Clapperboard,
   BarChart3,
+  FileText,
   UserCog,
   UserCircle2,
   ShieldCheck,
@@ -62,6 +63,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: '/bev', labelKey: 'nav.bev', icon: Radar, permission: TRACK_READ },
             { to: '/recordings', labelKey: 'nav.recordings', icon: Clapperboard, permission: RECORDING_READ },
       { to: '/analytics', labelKey: 'nav.analytics', icon: BarChart3, permission: ANALYTICS_READ },
+      { to: '/reports/daily', labelKey: 'nav.reporting', icon: FileText, permission: ANALYTICS_READ },
     ],
   },
   {
@@ -88,13 +90,16 @@ export function AppLayout() {
   const navigate = useNavigate();
   const { user, hasPermission, clear } = useAuth();
 
+  // Depend on `user` (not just the stable `hasPermission` ref): permissions load
+  // asynchronously after login, so without `user` here the memo never recomputes
+  // and the sidebar shows only ungated items until a hard refresh.
   const visibleGroups = useMemo(
     () =>
       NAV_GROUPS.map((group) => ({
         ...group,
         items: group.items.filter((it) => !it.permission || hasPermission(it.permission)),
       })).filter((g) => g.items.length > 0),
-    [hasPermission]
+    [hasPermission, user]
   );
 
   const handleLogout = () => {

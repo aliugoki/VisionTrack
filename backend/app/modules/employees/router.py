@@ -1,15 +1,30 @@
-"""employees module — to be implemented in a later step.
+"""Employees HTTP routes.
 
-The router is mounted so frontend developers can see the module exists
-in the OpenAPI schema. Replace this stub with real endpoints when the
-module is built.
+  GET /employees   the tenant's employee roster (imported from FaceTrack)
 """
+from __future__ import annotations
 
-from fastapi import APIRouter
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.db import get_db
+from app.core.deps import RequirePermission
+from app.core.permissions import EMPLOYEE_READ
+from app.modules.employees.schemas import EmployeeListResponse
+from app.modules.employees.service import list_employees
+from app.modules.users.models import User
 
 router = APIRouter(prefix="/employees", tags=["employees"])
 
 
-@router.get("/_ping", include_in_schema=False)
-async def _ping() -> dict[str, str]:
-    return {"module": "employees", "status": "scaffolded"}
+@router.get("", response_model=EmployeeListResponse)
+async def list_employees_endpoint(
+    search: str | None = Query(None),
+    current_user: User = Depends(RequirePermission(EMPLOYEE_READ)),
+    db: Annotated[AsyncSession, Depends(get_db)] = ...,
+) -> EmployeeListResponse:
+    """The employee roster for the tenant (synced from FaceTrack)."""
+    data = await list_employees(db, tenant_id=current_user.tenant_id, search=search)
+    return EmployeeListResponse(**data)

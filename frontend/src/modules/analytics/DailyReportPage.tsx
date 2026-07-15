@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Printer, X, Download, Filter } from 'lucide-react';
@@ -103,6 +103,7 @@ function fmtClock(iso: string): string {
 
 export default function DailyReportPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
 
   const emp = params.get('emp') || '';
@@ -206,11 +207,11 @@ export default function DailyReportPage() {
       <div className="mb-4 flex items-center justify-between print:hidden">
         <button
           type="button"
-          onClick={() => window.close()}
+          onClick={() => navigate('/analytics')}
           className="flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
         >
           <X className="h-4 w-4" />
-          {t('common.close')}
+          {t('common.back')}
         </button>
         <div className="flex items-center gap-2">
           <button

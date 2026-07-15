@@ -1,4 +1,28 @@
 {
+  "employees": {
+    "title": "Employees",
+    "subtitle": "Roster synced from FaceTrack. \"Recognized\" employees have been seen on a VisionTrack camera.",
+    "search": "Search employees…",
+    "empty": "No employees yet. Sync the roster from FaceTrack.",
+    "name": "Name",
+    "empId": "Employee ID",
+    "company": "Company",
+    "status": "Status",
+    "recognized": "Recognized",
+    "pending": "Not yet seen",
+    "count": "{{n}} employees"
+  },
+  "zonesPage": {
+    "title": "Zones",
+    "subtitle": "Every zone across your floor plans, with live occupancy.",
+    "empty": "No zones yet. Draw zones on a floor plan in the Floor Plans editor.",
+    "zone": "Zone",
+    "floorPlan": "Floor plan",
+    "rules": "Rules",
+    "live": "Live occupancy",
+    "present": "{{n}} present",
+    "emptyNow": "empty"
+  },
   "app": {
     "name": "VisionTrack",
     "tagline": "Operations Command"
@@ -53,6 +77,7 @@
     "alerts": "Alerts",
     "recordings": "Recordings",
     "analytics": "Analytics",
+    "reporting": "Reporting",
     "users": "Users",
     "roles": "Roles & permissions",
     "settings": "Settings",
