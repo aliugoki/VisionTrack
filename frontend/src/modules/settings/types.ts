@@ -11,6 +11,8 @@ export interface Tenant {
   is_active: boolean;
   timezone: string;
   recording_retention_days: number;
+  use_deepstream: boolean;
+  facetrack_feed_enabled: boolean;
   settings: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -22,4 +24,6 @@ export interface TenantUpdate {
   settings?: Record<string, unknown>;
   is_active?: boolean;
   recording_retention_days?: number;
+  use_deepstream?: boolean;
+  facetrack_feed_enabled?: boolean;
 }

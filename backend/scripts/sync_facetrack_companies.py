@@ -37,14 +37,25 @@ def main() -> None:
             sys.exit("no tenant in VisionTrack — seed one first")
         tenant = str(row[0])
 
+    # Companies whose (already-provisioned) tenant has the FaceTrack feed turned
+    # off are skipped, so a disabled tenant's reflected company stops refreshing.
+    vc.execute(
+        "SELECT external_company_id FROM tenants "
+        "WHERE external_company_id IS NOT NULL AND facetrack_feed_enabled = false"
+    )
+    disabled_companies = {row[0] for row in vc.fetchall()}
+
     fc = ft.cursor()
     fc.execute("SELECT company_id, company_name, admin_username, status FROM companies")
     rows = fc.fetchall()
 
     now = datetime.now(timezone.utc)
-    n = 0
+    n = skipped = 0
     for company_id, company_name, admin_username, status in rows:
         if not company_id:
+            continue
+        if str(company_id) in disabled_companies:
+            skipped += 1
             continue
         vc.execute(
             """
@@ -65,7 +76,8 @@ def main() -> None:
         n += 1
 
     vt.commit()
-    print(f"synced {n} companies from FaceTrack into VisionTrack tenant {tenant}")
+    print(f"synced {n} companies from FaceTrack into VisionTrack tenant {tenant}"
+          f"; skipped {skipped} (FaceTrack feed disabled)")
     ft.close()
     vt.close()
 

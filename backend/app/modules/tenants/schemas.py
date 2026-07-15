@@ -42,6 +42,7 @@ class TenantUpdate(BaseModel):
     is_active: bool | None = None
     recording_retention_days: int | None = Field(None, ge=1, le=3650)
     use_deepstream: bool | None = None
+    facetrack_feed_enabled: bool | None = None
 
     @field_validator("timezone")
     @classmethod
@@ -61,6 +62,7 @@ class TenantRead(TenantBase):
     timezone: str
     recording_retention_days: int
     use_deepstream: bool
+    facetrack_feed_enabled: bool
     settings: dict[str, Any]
     created_at: datetime
     updated_at: datetime

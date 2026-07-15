@@ -65,6 +65,18 @@ async def update_tenant(
     ):
         tenant.recording_retention_days = payload.recording_retention_days
         changed_fields.append("recording_retention_days")
+    if (
+        payload.use_deepstream is not None
+        and payload.use_deepstream != tenant.use_deepstream
+    ):
+        tenant.use_deepstream = payload.use_deepstream
+        changed_fields.append("use_deepstream")
+    if (
+        payload.facetrack_feed_enabled is not None
+        and payload.facetrack_feed_enabled != tenant.facetrack_feed_enabled
+    ):
+        tenant.facetrack_feed_enabled = payload.facetrack_feed_enabled
+        changed_fields.append("facetrack_feed_enabled")
 
     if not changed_fields:
         log.info("tenant.update_noop", tenant_id=str(tenant.id))
