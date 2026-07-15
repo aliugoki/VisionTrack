@@ -99,25 +99,38 @@ class FaceIdentityConsumer:
     async def _discovery_loop(self) -> None:
         while not self._stop.is_set():
             try:
+                # Only tenants with facetrack_feed_enabled=true are consumed.
+                desired: set[str] = set()
                 for tid, external_company_id in await self._fetch_tenants():
                     # Native per-tenant stream.
-                    self._ensure_task(
-                        f"face-identity:{tid}", self._consume_stream(tid)
-                    )
+                    key = f"face-identity:{tid}"
+                    desired.add(key)
+                    self._ensure_task(key, self._consume_stream(tid))
                     # Company-keyed stream: FaceTrack publishes by company_id (which
                     # it has); we route those events into the mapped tenant. This is
                     # the cross-system bridge for multi-tenant (Phase 3).
                     if external_company_id:
+                        ckey = f"face-identity:company:{external_company_id}"
+                        desired.add(ckey)
                         self._ensure_task(
-                            f"face-identity:company:{external_company_id}",
+                            ckey,
                             self._consume_stream(tid, stream_suffix=external_company_id),
                         )
+                # Reap tasks for tenants that have since been disabled (or deleted)
+                # — the flag can flip between discovery passes, so stop consuming.
+                self._reap_undesired(desired)
             except Exception as e:
                 log.warning("face_identity.discovery_failed", error=str(e))
             try:
                 await asyncio.wait_for(self._stop.wait(), timeout=30.0)
             except asyncio.TimeoutError:
                 pass
+
+    def _reap_undesired(self, desired: set[str]) -> None:
+        for key in [k for k in self._tasks if k not in desired]:
+            task = self._tasks.pop(key)
+            task.cancel()
+            log.info("face_identity.reaped", key=key)
 
     def _ensure_task(self, key: str, coro) -> None:
         existing = self._tasks.get(key)
@@ -132,7 +145,9 @@ class FaceIdentityConsumer:
     async def _fetch_tenants(self) -> list[tuple[UUID, str | None]]:
         async with AsyncSessionLocal() as db:
             result = await db.execute(
-                select(Tenant.id, Tenant.external_company_id)
+                select(Tenant.id, Tenant.external_company_id).where(
+                    Tenant.facetrack_feed_enabled.is_(True)
+                )
             )
             return [(row[0], row[1]) for row in result.all()]
 

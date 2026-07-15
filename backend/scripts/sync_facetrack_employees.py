@@ -30,11 +30,17 @@ def main() -> None:
     vt = psycopg2.connect(vt_url)
     vc = vt.cursor()
 
-    # company_id -> tenant_id from provisioned tenants.
-    vc.execute("SELECT external_company_id, id FROM tenants WHERE external_company_id IS NOT NULL")
+    # company_id -> tenant_id from provisioned tenants. Only tenants with the
+    # FaceTrack feed enabled are synced; a disabled tenant's employees are left
+    # untouched (its company maps to no entry here and is skipped below).
+    vc.execute(
+        "SELECT external_company_id, id FROM tenants "
+        "WHERE external_company_id IS NOT NULL AND facetrack_feed_enabled = true"
+    )
     company_to_tenant = {row[0]: row[1] for row in vc.fetchall()}
     if not company_to_tenant:
-        sys.exit("no tenants have external_company_id — run provision_tenants_from_companies first")
+        sys.exit("no FaceTrack-enabled tenants have external_company_id — "
+                 "run provision_tenants_from_companies first (or enable the feed)")
 
     fc = ft.cursor()
     fc.execute(

@@ -46,6 +46,7 @@ export default function TenantSettingsPage() {
   const [timezone, setTimezone] = useState('UTC');
   const [retentionDays, setRetentionDays] = useState(30);
   const [useDeepstream, setUseDeepstream] = useState(false);
+  const [facetrackFeed, setFacetrackFeed] = useState(true);
 
   useEffect(() => {
     if (tenant) {
@@ -53,6 +54,7 @@ export default function TenantSettingsPage() {
       setTimezone(tenant.timezone);
       setRetentionDays(tenant.recording_retention_days);
       setUseDeepstream(tenant.use_deepstream);
+      setFacetrackFeed(tenant.facetrack_feed_enabled);
     }
   }, [tenant]);
 
@@ -69,7 +71,8 @@ export default function TenantSettingsPage() {
     name !== tenant.name ||
     timezone !== tenant.timezone ||
     retentionDays !== tenant.recording_retention_days ||
-    useDeepstream !== tenant.use_deepstream;
+    useDeepstream !== tenant.use_deepstream ||
+    facetrackFeed !== tenant.facetrack_feed_enabled;
 
   const handleSave = async () => {
     try {
@@ -82,6 +85,10 @@ export default function TenantSettingsPage() {
             : undefined,
         use_deepstream:
           useDeepstream !== tenant.use_deepstream ? useDeepstream : undefined,
+        facetrack_feed_enabled:
+          facetrackFeed !== tenant.facetrack_feed_enabled
+            ? facetrackFeed
+            : undefined,
       });
       toast.success(t('settings.tenant.saveSuccess'));
     } catch (e: any) {
@@ -190,6 +197,25 @@ export default function TenantSettingsPage() {
             </div>
             <p className="text-xs text-muted-foreground">
               {t('settings.tenant.retentionHelp')}
+            </p>
+          </div>
+
+          {/* FaceTrack feed toggle */}
+          <div className="space-y-1 border-t border-border pt-4">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={facetrackFeed}
+                onChange={(e) => setFacetrackFeed(e.target.checked)}
+                disabled={!canEdit}
+                className="h-4 w-4 rounded border-input bg-surface text-primary focus:ring-2 focus:ring-ring"
+              />
+              <span className="text-sm font-medium text-foreground">
+                {t('settings.tenant.facetrackFeed')}
+              </span>
+            </label>
+            <p className="text-xs text-muted-foreground">
+              {t('settings.tenant.facetrackFeedHelp')}
             </p>
           </div>
 

@@ -609,6 +609,8 @@
       "retention": "Recording retention",
       "retentionHelp": "Older recordings are deleted automatically",
       "days": "days",
+      "facetrackFeed": "FaceTrack feed",
+      "facetrackFeedHelp": "Ingest live face recognitions from FaceTrack and sync its company/employee roster into this tenant. Turn off to stop consuming FaceTrack data.",
       "plan": "Plan",
       "status": "Status",
       "active": "Active",
