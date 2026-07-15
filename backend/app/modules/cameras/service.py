@@ -215,6 +215,10 @@ async def update_camera(
             camera.status = CameraStatus.ERROR.value
             await db.flush()
 
+    # Load the server-computed `updated_at` (onupdate=now()) within the async
+    # context — otherwise Pydantic serializing the response triggers a lazy
+    # reload outside the greenlet and raises MissingGreenlet.
+    await db.refresh(camera)
     return camera
 
 
