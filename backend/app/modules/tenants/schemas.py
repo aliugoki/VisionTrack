@@ -55,6 +55,7 @@ class TenantRead(TenantBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    external_company_id: str | None = None
     plan: str
     is_active: bool
     timezone: str

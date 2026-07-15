@@ -87,7 +87,7 @@ a superuser flag that bypasses the tenant filter.
 | Phase | Deliverable | Status |
 |---|---|---|
 | **0** | Decisions (auth source, platform model, GPU model) | — |
-| **1** | `tenants.external_company_id` + company→tenant provisioning + backfill | **in progress** |
+| **1** | `tenants.external_company_id` + company→tenant provisioning + backfill | **done** |
 | **2** | Platform super-admin: platform role, `GET /platform/tenants`, tenant-switch token, switcher UI | planned |
 | **3** | Tenant-aware bridges: employee sync per tenant, face-identity company→tenant map, cameras per tenant | planned |
 | **4** | Lifecycle: auto-provision on new company, suspend, cascade delete, per-tenant settings | planned |
@@ -101,6 +101,22 @@ a superuser flag that bypasses the tenant filter.
 4. **Face bridge:** can FaceTrack's publisher key events by `company_id`?
 5. **Demo data:** assign to a company vs keep a "Demo" tenant.
 6. **Routing:** single app + tenant switcher (recommended) vs subdomain-per-company.
+
+## 8b. Phase 1 — delivered
+
+- `tenants.external_company_id` (migration `0020`, unique) + on the model.
+- `tenants/provisioning.py::provision_tenant_for_company` — idempotent: tenant +
+  default roles + a **local admin user** (`admin@<subdomain>.visiontrack.local`,
+  password `ChangeMe123!` — rotate) + a default site.
+- `scripts/provision_tenants_from_companies.py` backfill (reads the synced
+  `companies` table; no FaceTrack access needed).
+- Login accepts reserved-domain emails (`.local`) so provisioned admins can sign
+  in.
+
+Verified: 4 tenants provisioned (MetaXperts / Sabri / Comet / IAA); each admin
+logs in and sees **only its own** tenant (0 cameras / 1 user) vs the Demo tenant
+(2 cameras) — real data isolation. Next: **Phase 2** (platform super-admin +
+tenant switcher) so you can browse all companies from one login.
 
 ## 9. Recommendation
 

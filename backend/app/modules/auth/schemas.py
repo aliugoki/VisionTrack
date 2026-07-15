@@ -1,10 +1,13 @@
 """Pydantic schemas for the auth module."""
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    # `str`, not EmailStr: auth matches the stored email + password, and stored
+    # emails may use reserved domains (e.g. provisioned admin@<sub>.visiontrack.local
+    # or the ai-worker service account) that EmailStr rejects.
+    email: str
     password: str
     # Optional — only needed if the same email exists across multiple tenants.
     # In the pilot (single tenant) this can be omitted.

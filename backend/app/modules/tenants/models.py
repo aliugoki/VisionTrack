@@ -24,6 +24,11 @@ class Tenant(Base):
         PG_UUID(as_uuid=True), primary_key=True, default=uuid4
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # 1:1 link to a FaceTrack company (its company_id). NULL for the demo/native
+    # tenant. Added in migration 0020 (multi-tenant Phase 1).
+    external_company_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True
+    )
     subdomain: Mapped[str] = mapped_column(
         String(63), nullable=False, unique=True, index=True
     )
