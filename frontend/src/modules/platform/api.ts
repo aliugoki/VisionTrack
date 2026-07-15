@@ -12,6 +12,7 @@ export interface PlatformTenant {
   timezone: string;
   recording_retention_days: number;
   is_active: boolean;
+  max_cameras: number;
   employee_count: number;
   camera_count: number;
   user_count: number;
@@ -23,6 +24,7 @@ export interface PlatformTenantUpdate {
   plan?: string;
   timezone?: string;
   recording_retention_days?: number;
+  max_cameras?: number;
 }
 
 const KEY = ['platform', 'tenants'] as const;

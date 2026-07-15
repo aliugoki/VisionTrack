@@ -52,6 +52,7 @@
     "name": "Name",
     "timezone": "Timezone",
     "retention": "Recording retention (days)",
+    "maxCameras": "Max cameras (0 = unlimited)",
     "updated": "Tenant updated"
   },
   "employees": {

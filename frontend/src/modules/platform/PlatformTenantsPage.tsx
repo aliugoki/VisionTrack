@@ -174,6 +174,7 @@ function SettingsDialog({ tenant, onClose }: { tenant: PlatformTenant; onClose: 
   const [name, setName] = useState(tenant.name);
   const [tz, setTz] = useState(tenant.timezone);
   const [retention, setRetention] = useState(String(tenant.recording_retention_days));
+  const [maxCameras, setMaxCameras] = useState(String(tenant.max_cameras || 0));
 
   return (
     <Dialog
@@ -189,6 +190,7 @@ function SettingsDialog({ tenant, onClose }: { tenant: PlatformTenant; onClose: 
                 await update.mutateAsync({
                   id: tenant.id, name: name.trim(), timezone: tz.trim(),
                   recording_retention_days: Math.max(1, Number(retention) || 30),
+                  max_cameras: Math.max(0, Number(maxCameras) || 0),
                 });
                 toast.success(t('platform.updated'));
                 onClose();
@@ -210,6 +212,10 @@ function SettingsDialog({ tenant, onClose }: { tenant: PlatformTenant; onClose: 
         <label className="block text-sm">
           <span className="mb-1 block text-muted-foreground">{t('platform.retention')}</span>
           <Input type="number" min={1} value={retention} onChange={(e) => setRetention(e.target.value)} />
+        </label>
+        <label className="block text-sm">
+          <span className="mb-1 block text-muted-foreground">{t('platform.maxCameras')}</span>
+          <Input type="number" min={0} value={maxCameras} onChange={(e) => setMaxCameras(e.target.value)} />
         </label>
       </div>
     </Dialog>

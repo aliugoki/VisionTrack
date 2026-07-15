@@ -39,6 +39,7 @@ async def list_all_tenants(db: AsyncSession) -> dict:
         "external_company_id": t.external_company_id, "plan": t.plan,
         "timezone": t.timezone, "recording_retention_days": t.recording_retention_days,
         "is_active": t.is_active,
+        "max_cameras": (t.settings or {}).get("max_cameras", 0),
         "employee_count": emp.get(t.id, 0), "camera_count": cam.get(t.id, 0),
         "user_count": usr.get(t.id, 0),
     } for t in tenants]
@@ -88,6 +89,9 @@ async def update_tenant(
         tenant.timezone = payload.timezone
     if payload.recording_retention_days is not None:
         tenant.recording_retention_days = payload.recording_retention_days
+    if payload.max_cameras is not None:
+        # JSONB reassignment (not in-place) so SQLAlchemy flags it dirty.
+        tenant.settings = {**(tenant.settings or {}), "max_cameras": payload.max_cameras}
     await db.flush()
     await db.commit()
     await db.refresh(tenant)

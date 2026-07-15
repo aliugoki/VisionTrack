@@ -91,7 +91,7 @@ a superuser flag that bypasses the tenant filter.
 | **2** | Platform super-admin: platform role, `GET /platform/tenants`, tenant-switch token, switcher UI | **done** |
 | **3** | Tenant-aware bridges: employee sync per tenant, face-identity company→tenant map | **done** |
 | **4** | Lifecycle: auto-provision on new company, suspend, cascade delete, per-tenant settings | **done** |
-| **5** | Hardening: cross-tenant leakage tests, quotas, audit, docs | planned |
+| **5** | Hardening: cross-tenant leakage tests, quotas, audit, docs | **done** |
 
 ## 8. Key decisions
 
@@ -167,6 +167,23 @@ so events correlate to tracks. The VisionTrack side is ready.
 Verified live: suspend blocks a company login (403) while platform-enter still
 works; delete guards return 400/409; a full cascade-delete of a suspended tenant
 removed all its data, then auto-provision + re-sync restored it.
+
+## 8f. Phase 5 — delivered (multi-tenant complete)
+
+- **Cross-tenant leakage suite** (`scripts/check_tenant_isolation.py`): logs in as
+  two company admins + a platform admin and probes cross-access. Verified **12
+  checks, no leaks** — B can't GET/PATCH/DELETE A's camera by id (404), lists are
+  scoped, tenant admins are 403 on `/platform/*`. (Note: FaceTrack emp_ids are
+  per-company numbers that repeat across companies — overlapping values are
+  expected and are not a leak; rows are still tenant-scoped.)
+- **Per-tenant quotas**: `tenant.settings.max_cameras` (0 = unlimited), settable
+  by a platform admin (`PATCH /platform/tenants/{id}` / the Tenants page), enforced
+  in `create_camera` (409 at limit). Verified live.
+- **Audit**: platform enter / update / delete are logged with the acting platform
+  admin's identity — accountability for the impersonation model.
+
+All five phases are done: company→tenant isolation, platform admin + switcher,
+tenant-aware bridges, lifecycle + auto-provision, and hardening.
 
 ## 9. Recommendation
 

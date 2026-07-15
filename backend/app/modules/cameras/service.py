@@ -120,6 +120,8 @@ async def create_camera(
     payload: CameraCreate,
 ) -> Camera:
     """Create a camera and register it with MediaMTX."""
+    from app.modules.tenants.quotas import enforce_camera_quota
+    await enforce_camera_quota(db, tenant_id)
     await _load_site_in_tenant(db, payload.site_id, tenant_id)
 
     # Enforce unique name within tenant *before* attempting MediaMTX sync,

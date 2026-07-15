@@ -15,6 +15,7 @@ class PlatformTenant(BaseModel):
     timezone: str
     recording_retention_days: int
     is_active: bool
+    max_cameras: int = 0
     employee_count: int = 0
     camera_count: int = 0
     user_count: int = 0
@@ -31,3 +32,5 @@ class PlatformTenantUpdate(BaseModel):
     plan: str | None = Field(None, max_length=50)
     timezone: str | None = Field(None, max_length=64)
     recording_retention_days: int | None = Field(None, ge=1, le=3650)
+    # Per-tenant camera quota (0 = unlimited), stored in tenant.settings.
+    max_cameras: int | None = Field(None, ge=0, le=100000)
