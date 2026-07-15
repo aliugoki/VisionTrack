@@ -21,6 +21,14 @@
     "updated": "تم تحديث الشركة",
     "deleted": "تم حذف الشركة"
   },
+  "platform": {
+    "switchCompany": "تبديل الشركة",
+    "viewing": "عرض: {{name}}",
+    "exit": "الخروج إلى المنصة",
+    "entered": "تعرض الآن {{name}}",
+    "counts": "{{emp}} موظف · {{cam}} كاميرا",
+    "noTenants": "لا توجد شركات"
+  },
   "employees": {
     "title": "الموظفون",
     "subtitle": "قائمة مُزامَنة من FaceTrack. الموظفون \"المعروفون\" شوهدوا على كاميرا VisionTrack.",

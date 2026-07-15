@@ -42,6 +42,7 @@ class UserRead(UserBase):
     id: UUID
     tenant_id: UUID
     is_superuser: bool
+    is_platform_admin: bool = False
     last_login_at: datetime | None
     created_at: datetime
     updated_at: datetime

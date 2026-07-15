@@ -88,7 +88,7 @@ a superuser flag that bypasses the tenant filter.
 |---|---|---|
 | **0** | Decisions (auth source, platform model, GPU model) | — |
 | **1** | `tenants.external_company_id` + company→tenant provisioning + backfill | **done** |
-| **2** | Platform super-admin: platform role, `GET /platform/tenants`, tenant-switch token, switcher UI | planned |
+| **2** | Platform super-admin: platform role, `GET /platform/tenants`, tenant-switch token, switcher UI | **done** |
 | **3** | Tenant-aware bridges: employee sync per tenant, face-identity company→tenant map, cameras per tenant | planned |
 | **4** | Lifecycle: auto-provision on new company, suspend, cascade delete, per-tenant settings | planned |
 | **5** | Hardening: cross-tenant leakage tests, quotas, audit, docs | planned |
@@ -117,6 +117,22 @@ Verified: 4 tenants provisioned (MetaXperts / Sabri / Comet / IAA); each admin
 logs in and sees **only its own** tenant (0 cameras / 1 user) vs the Demo tenant
 (2 cameras) — real data isolation. Next: **Phase 2** (platform super-admin +
 tenant switcher) so you can browse all companies from one login.
+
+## 8c. Phase 2 — delivered
+
+- `users.is_platform_admin` (migration `0021`); existing superusers promoted; the
+  seeded superuser is a platform admin. Exposed on `/users/me`.
+- **Impersonation switch** (no change to the security-critical `get_current_user`
+  — zero leakage surface): `GET /platform/tenants` (all tenants + employee/camera
+  counts) and `POST /platform/tenants/{id}/enter` (mints a token for that tenant's
+  admin). Both gated by `require_platform_admin`.
+- Login accepts reserved-domain emails (Phase 1) so entering works.
+- Frontend: `TenantSwitcher` in the sidebar — platform admins pick a company to
+  enter; a banner exits back to the platform. The platform token is stashed so
+  switching/exit works; react-query cache is cleared on switch.
+
+Verified: platform admin lists 5 tenants, enters MetaXperts (token re-scopes),
+tenant admins are 403 on `/platform/*`.
 
 ## 9. Recommendation
 

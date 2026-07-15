@@ -33,6 +33,7 @@ from app.modules.auth.router import router as auth_router
 from app.modules.cameras.router import router as cameras_router
 from app.modules.companies.router import router as companies_router
 from app.modules.employees.router import router as employees_router
+from app.modules.platform.router import router as platform_router
 from app.modules.events.router import router as events_router
 from app.modules.floor_plans.router import router as floor_plans_router
 from app.modules.live_wall.router import router as live_wall_router
@@ -212,6 +213,7 @@ for r in (
     zones_router,
     employees_router,
     companies_router,
+    platform_router,
     tracks_router,
     events_router,
     alerts_router,

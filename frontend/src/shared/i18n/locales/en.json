@@ -21,6 +21,14 @@
     "updated": "Company updated",
     "deleted": "Company deleted"
   },
+  "platform": {
+    "switchCompany": "Switch company",
+    "viewing": "Viewing: {{name}}",
+    "exit": "Exit to platform",
+    "entered": "Now viewing {{name}}",
+    "counts": "{{emp}} employees · {{cam}} cameras",
+    "noTenants": "No companies"
+  },
   "employees": {
     "title": "Employees",
     "subtitle": "Roster synced from FaceTrack. \"Recognized\" employees have been seen on a VisionTrack camera.",

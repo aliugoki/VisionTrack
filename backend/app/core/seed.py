@@ -91,6 +91,7 @@ async def _ensure_superuser(db: AsyncSession, tenant_id, admin_role: Role) -> No
             locale="en",
             is_active=True,
             is_superuser=True,
+            is_platform_admin=True,
             password_hash=hash_password(settings.FIRST_SUPERUSER_PASSWORD),
             roles=[admin_role],
         )

@@ -8,6 +8,7 @@ export interface CurrentUser {
   full_name: string;
   locale: string;
   is_superuser: boolean;
+  is_platform_admin?: boolean;
   roles: Array<{ id: string; name: string; permissions: string[] }>;
 }
 
@@ -16,9 +17,16 @@ interface AuthState {
   refreshToken: string | null;
   user: CurrentUser | null;
   permissions: Set<string>;
+  // Platform admin "enter tenant": the original platform token is stashed so we
+  // can switch/exit; actingTenant marks that we're impersonating a tenant.
+  platformAccess: string | null;
+  platformRefresh: string | null;
+  actingTenant: { id: string; name: string } | null;
   setTokens: (access: string, refresh: string) => void;
   setUser: (user: CurrentUser) => void;
   clear: () => void;
+  beginActing: (access: string, refresh: string, tenant: { id: string; name: string }) => void;
+  stopActing: () => void;
   hasPermission: (perm: string) => boolean;
   hasAnyPermission: (...perms: string[]) => boolean;
 }
@@ -30,9 +38,31 @@ export const useAuth = create<AuthState>()(
       refreshToken: null,
       user: null,
       permissions: new Set(),
+      platformAccess: null,
+      platformRefresh: null,
+      actingTenant: null,
 
       setTokens: (access, refresh) =>
         set({ accessToken: access, refreshToken: refresh }),
+
+      beginActing: (access, refresh, tenant) =>
+        set((state) => ({
+          // Stash the platform token the first time we enter a tenant.
+          platformAccess: state.actingTenant ? state.platformAccess : state.accessToken,
+          platformRefresh: state.actingTenant ? state.platformRefresh : state.refreshToken,
+          accessToken: access,
+          refreshToken: refresh,
+          actingTenant: tenant,
+        })),
+
+      stopActing: () =>
+        set((state) => ({
+          accessToken: state.platformAccess,
+          refreshToken: state.platformRefresh,
+          platformAccess: null,
+          platformRefresh: null,
+          actingTenant: null,
+        })),
 
       setUser: (user) => {
         const perms = new Set<string>();
@@ -48,6 +78,9 @@ export const useAuth = create<AuthState>()(
           refreshToken: null,
           user: null,
           permissions: new Set(),
+          platformAccess: null,
+          platformRefresh: null,
+          actingTenant: null,
         }),
 
       hasPermission: (perm) => {
@@ -69,6 +102,9 @@ export const useAuth = create<AuthState>()(
         accessToken: state.accessToken,
         refreshToken: state.refreshToken,
         user: state.user,
+        platformAccess: state.platformAccess,
+        platformRefresh: state.platformRefresh,
+        actingTenant: state.actingTenant,
       }),
       onRehydrateStorage: () => (state) => {
         // Rebuild the permissions Set after rehydrating from localStorage

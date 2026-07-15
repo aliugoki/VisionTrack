@@ -22,6 +22,7 @@ import {
   LogOut,
 } from 'lucide-react';
 import { useAuth } from '@/shared/hooks/useAuth';
+import { TenantSwitcher } from '@/modules/platform/TenantSwitcher';
 import { Logo } from '@/shared/components/Logo';
 import { LanguageSwitcher } from '@/shared/components/LanguageSwitcher';
 import { cn } from '@/shared/lib/cn';
@@ -163,8 +164,13 @@ export function AppLayout() {
           ))}
         </nav>
 
+        {/* Platform tenant switcher (platform admins) */}
+        <div className="border-t border-border px-3 pt-3">
+          <TenantSwitcher />
+        </div>
+
         {/* User pod */}
-        <div className="border-t border-border p-3">
+        <div className="p-3">
           <div className="flex items-center gap-3 rounded-md p-2">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-sm font-semibold text-primary">
               {initials}
