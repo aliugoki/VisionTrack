@@ -89,7 +89,7 @@ a superuser flag that bypasses the tenant filter.
 | **0** | Decisions (auth source, platform model, GPU model) | — |
 | **1** | `tenants.external_company_id` + company→tenant provisioning + backfill | **done** |
 | **2** | Platform super-admin: platform role, `GET /platform/tenants`, tenant-switch token, switcher UI | **done** |
-| **3** | Tenant-aware bridges: employee sync per tenant, face-identity company→tenant map, cameras per tenant | planned |
+| **3** | Tenant-aware bridges: employee sync per tenant, face-identity company→tenant map | **done** |
 | **4** | Lifecycle: auto-provision on new company, suspend, cascade delete, per-tenant settings | planned |
 | **5** | Hardening: cross-tenant leakage tests, quotas, audit, docs | planned |
 
@@ -133,6 +133,22 @@ tenant switcher) so you can browse all companies from one login.
 
 Verified: platform admin lists 5 tenants, enters MetaXperts (token re-scopes),
 tenant admins are 403 on `/platform/*`.
+
+## 8d. Phase 3 — delivered
+
+- **Employee sync is tenant-aware:** each employee routes to its company's tenant
+  (`tenant.external_company_id = user_data.company_id`); employees stranded in the
+  wrong tenant by earlier single-tenant syncs are cleaned up. Verified: 69
+  employees distributed (MetaXperts 48 / Sabri 12 / IAA 6 / Comet 3), Demo 0.
+- **Face-identity bridge is tenant-aware:** the consumer now also reads the
+  **company-keyed** stream `vt:face:identities:<company_id>` and routes events into
+  the mapped tenant — so FaceTrack publishes by `company_id` (which it has) with
+  no FaceTrack-side tenant mapping. Verified: a synthetic recognition on
+  MetaXperts' company stream was consumed + processed under the MetaXperts tenant.
+
+Remaining for live recognition: FaceTrack must publish to
+`vt:face:identities:<company_id>` and VisionTrack must be running live tracking
+so events correlate to tracks. The VisionTrack side is ready.
 
 ## 9. Recommendation
 

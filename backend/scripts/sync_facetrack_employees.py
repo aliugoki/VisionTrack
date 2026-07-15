@@ -1,20 +1,16 @@
-"""Sync the employee roster from FaceTrack into VisionTrack.
+"""Sync the employee roster from FaceTrack into VisionTrack — tenant-aware.
 
-FaceTrack (the face-recognition system) owns the roster in its ``user_data``
-table. VisionTrack's ``employees`` table is a synced copy so the dashboard can
-show and filter by employee. ``emp_id`` is the shared key the face-identity
-bridge stamps onto ``person_identities``, so a synced employee links to their
-tracked identity.
+Each FaceTrack employee is routed to its company's VisionTrack tenant
+(``tenant.external_company_id = user_data.company_id``), so a company's employees
+land in that company's isolated tenant (multi-tenant Phase 3). Employees whose
+company has no provisioned tenant are skipped. Idempotent; also cleans up
+employees left in the wrong tenant by earlier single-tenant syncs.
 
-Because the two databases live on different networks, run this where both are
-reachable (e.g. a ``--network host`` container):
+Secrets are never copied. Run where both DBs are reachable (--network host):
 
     FACETRACK_DATABASE_URL=postgresql://postgres:PW@localhost:5432/facial_recognition_db \
-    VT_DATABASE_URL=postgresql://visiontrack:visiontrack@localhost:15432/visiontrack \
+    VT_DATABASE_URL=postgresql://visiontrack:PW@localhost:15432/visiontrack \
     python -m scripts.sync_facetrack_employees
-
-Idempotent: upserts on (tenant_id, emp_id). Target tenant = ``VT_TENANT_ID`` or,
-if unset, the oldest tenant in VisionTrack (fine for a single-tenant install).
 """
 import os
 import sys
@@ -34,13 +30,11 @@ def main() -> None:
     vt = psycopg2.connect(vt_url)
     vc = vt.cursor()
 
-    tenant = os.environ.get("VT_TENANT_ID")
-    if not tenant:
-        vc.execute("SELECT id FROM tenants ORDER BY created_at LIMIT 1")
-        row = vc.fetchone()
-        if not row:
-            sys.exit("no tenant in VisionTrack — seed one first")
-        tenant = str(row[0])
+    # company_id -> tenant_id from provisioned tenants.
+    vc.execute("SELECT external_company_id, id FROM tenants WHERE external_company_id IS NOT NULL")
+    company_to_tenant = {row[0]: row[1] for row in vc.fetchall()}
+    if not company_to_tenant:
+        sys.exit("no tenants have external_company_id — run provision_tenants_from_companies first")
 
     fc = ft.cursor()
     fc.execute(
@@ -49,9 +43,13 @@ def main() -> None:
     rows = fc.fetchall()
 
     now = datetime.now(timezone.utc)
-    n = 0
+    synced = skipped = 0
     for emp_id, first_name, last_name, company_id, image_path in rows:
         if not emp_id:
+            continue
+        tenant = company_to_tenant.get(company_id)
+        if tenant is None:
+            skipped += 1  # this company has no VisionTrack tenant yet
             continue
         vc.execute(
             """
@@ -66,13 +64,27 @@ def main() -> None:
               image_path = EXCLUDED.image_path,
               synced_at = EXCLUDED.synced_at
             """,
-            (str(uuid.uuid4()), tenant, str(emp_id), first_name, last_name,
+            (str(uuid.uuid4()), str(tenant), str(emp_id), first_name, last_name,
              company_id, image_path, now),
         )
-        n += 1
+        synced += 1
 
+    # Remove FaceTrack employees stranded in the wrong tenant (e.g. the demo
+    # tenant from an earlier single-tenant sync).
+    vc.execute(
+        """
+        DELETE FROM employees e
+        WHERE e.source = 'facetrack' AND e.external_company_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM tenants t
+            WHERE t.id = e.tenant_id AND t.external_company_id = e.external_company_id
+          )
+        """
+    )
+    removed = vc.rowcount
     vt.commit()
-    print(f"synced {n} employees from FaceTrack into VisionTrack tenant {tenant}")
+    print(f"synced {synced} employees across {len(company_to_tenant)} tenants; "
+          f"skipped {skipped} (no tenant); removed {removed} mis-assigned")
     ft.close()
     vt.close()
 

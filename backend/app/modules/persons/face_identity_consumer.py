@@ -99,10 +99,19 @@ class FaceIdentityConsumer:
     async def _discovery_loop(self) -> None:
         while not self._stop.is_set():
             try:
-                for tid in await self._fetch_tenant_ids():
+                for tid, external_company_id in await self._fetch_tenants():
+                    # Native per-tenant stream.
                     self._ensure_task(
                         f"face-identity:{tid}", self._consume_stream(tid)
                     )
+                    # Company-keyed stream: FaceTrack publishes by company_id (which
+                    # it has); we route those events into the mapped tenant. This is
+                    # the cross-system bridge for multi-tenant (Phase 3).
+                    if external_company_id:
+                        self._ensure_task(
+                            f"face-identity:company:{external_company_id}",
+                            self._consume_stream(tid, stream_suffix=external_company_id),
+                        )
             except Exception as e:
                 log.warning("face_identity.discovery_failed", error=str(e))
             try:
@@ -120,10 +129,12 @@ class FaceIdentityConsumer:
                 log.warning("face_identity.task_died_respawning", key=key, error=str(exc))
         self._tasks[key] = asyncio.create_task(coro, name=key)
 
-    async def _fetch_tenant_ids(self) -> list[UUID]:
+    async def _fetch_tenants(self) -> list[tuple[UUID, str | None]]:
         async with AsyncSessionLocal() as db:
-            result = await db.execute(select(Tenant.id))
-            return [row[0] for row in result.all()]
+            result = await db.execute(
+                select(Tenant.id, Tenant.external_company_id)
+            )
+            return [(row[0], row[1]) for row in result.all()]
 
     async def _ensure_consumer_group(self, stream_key: str) -> None:
         if self._redis is None:
@@ -137,10 +148,13 @@ class FaceIdentityConsumer:
             if "BUSYGROUP" not in str(e):
                 log.warning("face_identity.group_create_failed", error=str(e))
 
-    async def _consume_stream(self, tenant_id: UUID) -> None:
-        stream_key = f"{settings.FACE_IDENTITY_STREAM_PREFIX}:{tenant_id}"
+    async def _consume_stream(self, tenant_id: UUID, stream_suffix=None) -> None:
+        # stream_suffix lets one tenant consume both its own stream and its
+        # company-keyed stream (Phase 3); events always route to `tenant_id`.
+        suffix = stream_suffix if stream_suffix is not None else tenant_id
+        stream_key = f"{settings.FACE_IDENTITY_STREAM_PREFIX}:{suffix}"
         await self._ensure_consumer_group(stream_key)
-        log.info("face_identity.starting", tenant_id=str(tenant_id))
+        log.info("face_identity.starting", tenant_id=str(tenant_id), stream=stream_key)
 
         backoff = 1.0
         while not self._stop.is_set():
