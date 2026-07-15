@@ -65,6 +65,10 @@ The full architecture diagram lives in `docs/architecture.md` (to be written in 
   reporting: zones, calibration (homography), occupancy / dwell / timeline /
   attendance / zone-rollup, the report route (CSV + printable PDF), filters,
   code map, and how to run the tests.
+- [`docs/MULTI_TENANT_SCOPING.md`](docs/MULTI_TENANT_SCOPING.md) — one tenant per
+  FaceTrack company: isolation, platform admin, tenant-aware bridges, lifecycle.
+- [`docs/LIVE_RECOGNITION.md`](docs/LIVE_RECOGNITION.md) — how a FaceTrack
+  recognition becomes a named person in the right VisionTrack tenant (end to end).
 - [`docs/MV3DT.md`](docs/MV3DT.md) — multi-view 3D tracking / cross-camera fusion.
 - [`docs/DEPLOY_BOTH_SYSTEMS.md`](docs/DEPLOY_BOTH_SYSTEMS.md) — deploying
   VisionTrack alongside FaceTrack.
