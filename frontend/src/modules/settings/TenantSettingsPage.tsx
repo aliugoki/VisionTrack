@@ -66,9 +66,11 @@ export default function TenantSettingsPage() {
     );
   }
 
-  // Detect whether the form has unsaved changes
+  // Detect whether the form has unsaved changes. Compare the trimmed name to
+  // match what handleSave actually sends — otherwise a whitespace-only edit
+  // enables Save but submits an all-undefined (no-op) PATCH and stays "dirty".
   const dirty =
-    name !== tenant.name ||
+    name.trim() !== tenant.name ||
     timezone !== tenant.timezone ||
     retentionDays !== tenant.recording_retention_days ||
     useDeepstream !== tenant.use_deepstream ||
