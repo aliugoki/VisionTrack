@@ -35,6 +35,10 @@ class UserPasswordUpdate(BaseModel):
 class UserRead(UserBase):
     model_config = ConfigDict(from_attributes=True)
 
+    # Relax email on OUTPUT: stored service-account emails (e.g. the AI worker's
+    # ai-worker@system.local) use reserved domains that EmailStr rejects. Input
+    # is still validated via UserCreate.email (EmailStr).
+    email: str
     id: UUID
     tenant_id: UUID
     is_superuser: bool

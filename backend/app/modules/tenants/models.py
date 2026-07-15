@@ -41,6 +41,11 @@ class Tenant(Base):
         String(64), nullable=False, server_default="UTC", default="UTC"
     )
     settings: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default="{}", default=dict, nullable=False)
+    # Feature flag added in migration 0013 — declared here so it's selected and
+    # TenantRead can serialize it (otherwise /tenants/me 500s on a missing attr).
+    use_deepstream: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", default=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

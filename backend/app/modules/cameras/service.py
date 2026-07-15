@@ -162,6 +162,9 @@ async def create_camera(
         await db.flush()
         log.warning("camera.created_but_mediamtx_failed", camera_id=str(camera.id))
 
+    # Load server-defaulted columns (id/created_at/updated_at) in the async
+    # context so response serialization doesn't lazy-load and raise MissingGreenlet.
+    await db.refresh(camera)
     return camera
 
 
