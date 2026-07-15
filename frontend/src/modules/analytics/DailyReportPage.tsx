@@ -382,6 +382,7 @@ export default function DailyReportPage() {
                     <th className="py-1.5 pr-3 font-semibold">{t('analytics.report.departure')}</th>
                     <th className="py-1.5 pr-3 text-right font-semibold">{t('analytics.report.onSite')}</th>
                     <th className="py-1.5 pr-3 text-right font-semibold">{t('analytics.report.tracked')}</th>
+                    <th className="py-1.5 pr-3 text-right font-semibold">{t('analytics.report.idle')}</th>
                     <th className="py-1.5 pr-3 text-right font-semibold">{t('analytics.report.zones')}</th>
                     <th className="py-1.5 font-semibold">{t('analytics.dwell.status')}</th>
                   </tr>
@@ -396,6 +397,9 @@ export default function DailyReportPage() {
                       </td>
                       <td className="py-1.5 pr-3 text-right tabular-nums">{fmtDuration(a.span_seconds)}</td>
                       <td className="py-1.5 pr-3 text-right font-medium tabular-nums">{fmtDuration(a.tracked_seconds)}</td>
+                      <td className="py-1.5 pr-3 text-right tabular-nums text-gray-500">
+                        {a.idle_seconds > 0 ? fmtDuration(a.idle_seconds) : '—'}
+                      </td>
                       <td className="py-1.5 pr-3 text-right tabular-nums">{a.zones_count}</td>
                       <td className="py-1.5">
                         {a.present ? t('analytics.dwell.hereNow') : t('analytics.report.departed')}

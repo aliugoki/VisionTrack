@@ -12,6 +12,7 @@ from app.modules.analytics.dwell import (
     camera_zone_index,
     clip_interval,
     track_zone_intervals,
+    union_seconds,
     zone_durations_from_intervals,
 )
 
@@ -207,6 +208,31 @@ def test_timeline_merges_overlapping_fragments():
 
 def test_timeline_empty():
     assert build_person_timeline([]) == []
+
+
+# --------------------------------------------------------------------------- #
+# union_seconds — for aisle/idle time
+# --------------------------------------------------------------------------- #
+
+def _iv(a, b):
+    return (T0 + timedelta(minutes=a), T0 + timedelta(minutes=b))
+
+
+def test_union_seconds_disjoint():
+    assert union_seconds([_iv(0, 10), _iv(20, 30)]) == 20 * 60
+
+
+def test_union_seconds_overlap_counts_once():
+    assert union_seconds([_iv(0, 20), _iv(10, 30)]) == 30 * 60
+
+
+def test_union_seconds_contiguous_merges():
+    assert union_seconds([_iv(0, 10), _iv(10, 20)]) == 20 * 60
+
+
+def test_union_seconds_empty_and_zero():
+    assert union_seconds([]) == 0.0
+    assert union_seconds([_iv(5, 5)]) == 0.0
 
 
 # --------------------------------------------------------------------------- #

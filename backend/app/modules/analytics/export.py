@@ -62,7 +62,7 @@ def attendance_csv(data: dict) -> str:
     w.writerow([
         "employee_id", "employee_name", "arrival", "departure",
         "span_seconds", "span", "tracked_seconds", "tracked",
-        "zones", "present",
+        "idle_seconds", "idle", "zones", "present",
     ])
     for r in data.get("rows", []):
         w.writerow([
@@ -70,6 +70,7 @@ def attendance_csv(data: dict) -> str:
             _iso(r.get("arrival")), _iso(r.get("departure")),
             int(round(r.get("span_seconds", 0))), _hms(r.get("span_seconds", 0)),
             int(round(r.get("tracked_seconds", 0))), _hms(r.get("tracked_seconds", 0)),
+            int(round(r.get("idle_seconds", 0))), _hms(r.get("idle_seconds", 0)),
             r.get("zones_count", 0),
             "yes" if r.get("present") else "no",
         ])

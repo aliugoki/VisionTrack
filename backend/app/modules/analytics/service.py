@@ -43,6 +43,7 @@ from app.modules.analytics.dwell import (
     camera_zone_index,
     clip_interval,
     track_zone_intervals,
+    union_seconds,
     zone_durations_from_intervals,
 )
 from app.modules.analytics.occupancy import zones_occupancy_from_tracks
@@ -437,14 +438,16 @@ async def _resolve_tracks_with_zones(
                 samples, meta["seg_start"], meta["seg_end"])
 
     # 3) Emit records: per-point where we have world samples, else whole-track.
+    #    span_seconds = the track's window-clipped presence (for aisle/idle time).
     out: list[dict] = []
     for rec in named:
         tid = rec["track_id"]
+        span = (rec["end"] - rec["start"]).total_seconds()
         if tid in intervals_by_track:
             out.append({
                 "emp_id": rec["emp_id"], "name": rec["name"],
                 "present": rec["present"], "camera_id": rec["camera_id"],
-                "intervals": intervals_by_track[tid],
+                "span_seconds": span, "intervals": intervals_by_track[tid],
             })
         else:
             refs = resolve_track_zone_refs(
@@ -453,7 +456,8 @@ async def _resolve_tracks_with_zones(
             out.append({
                 "emp_id": rec["emp_id"], "name": rec["name"],
                 "present": rec["present"], "camera_id": rec["camera_id"],
-                "zones": refs, "start": rec["start"], "end": rec["end"],
+                "span_seconds": span, "zones": refs,
+                "start": rec["start"], "end": rec["end"],
             })
     return out
 
@@ -635,6 +639,60 @@ async def get_zone_dwell(
     }
 
 
+async def _aisle_by_employee(
+    db: AsyncSession,
+    *,
+    tenant_id: UUID,
+    started_after: datetime,
+    started_before: datetime,
+    active_window_sec: int,
+    emp_id: str | None = None,
+) -> dict:
+    """Per-employee **idle/aisle** seconds — time a person's track existed but
+    their position was in **no** zone (walking between desks / in an aisle).
+
+    Per track: ``span - covered``, where ``covered`` is the union of the track's
+    in-zone intervals. Calibrated cameras (per-track-point) reveal aisle time
+    inside a track; whole-track (marker/last-bbox) attribution is fully in-zone so
+    it contributes zero. Summed per employee (same non-cross-track model as
+    ``tracked_seconds``)."""
+    now = datetime.now(UTC)
+    active_cutoff = now - timedelta(seconds=active_window_sec)
+    rows = (await db.execute(
+        select(
+            Track.id, Track.camera_id, Track.person_id,
+            Track.started_at, Track.ended_at, Track.updated_at, Track.last_bbox,
+        ).where(
+            Track.tenant_id == tenant_id,
+            Track.started_at < started_before,
+            or_(Track.ended_at.is_(None), Track.ended_at >= started_after),
+        )
+    )).all()
+    best_by_track, best_by_person = await _best_identity_by_track(
+        db, tenant_id=tenant_id,
+        track_ids=[r.id for r in rows],
+        person_ids=[r.person_id for r in rows if r.person_id is not None],
+    )
+    _fps, marker_zones, plan_zones, homographies = await _zone_resolution_context(
+        db, tenant_id=tenant_id)
+    resolved = await _resolve_tracks_with_zones(
+        db, tenant_id=tenant_id, rows=rows,
+        best_by_track=best_by_track, best_by_person=best_by_person,
+        marker_zones=marker_zones, plan_zones=plan_zones, homographies=homographies,
+        started_after=started_after, started_before=started_before,
+        active_cutoff=active_cutoff, only_emp=emp_id)
+
+    aisle: dict[str, float] = {}
+    for rec in resolved:
+        span = rec.get("span_seconds", 0.0)
+        if "intervals" in rec:
+            covered = union_seconds([(iv["start"], iv["end"]) for iv in rec["intervals"]])
+        else:
+            covered = span if rec.get("zones") else 0.0
+        aisle[rec["emp_id"]] = aisle.get(rec["emp_id"], 0.0) + max(0.0, span - covered)
+    return aisle
+
+
 async def get_attendance(
     db: AsyncSession,
     *,
@@ -646,19 +704,27 @@ async def get_attendance(
     emp_id: str | None = None,
     zone_id: str | None = None,
 ) -> dict:
-    """Per-employee attendance (arrival / departure / on-site span / tracked time)
-    over the window. Rolls up ``get_zone_dwell`` so both stay consistent."""
+    """Per-employee attendance (arrival / departure / on-site span / tracked /
+    idle) over the window. Rolls up ``get_zone_dwell`` so it stays consistent,
+    and adds per-employee idle/aisle time (tracked but in no zone)."""
     dwell = await get_zone_dwell(
         db, tenant_id=tenant_id,
         started_after=started_after, started_before=started_before,
         active_window_sec=active_window_sec, min_seconds=min_seconds,
         emp_id=emp_id, zone_id=zone_id,
     )
+    aisle = await _aisle_by_employee(
+        db, tenant_id=tenant_id,
+        started_after=started_after, started_before=started_before,
+        active_window_sec=active_window_sec, emp_id=emp_id)
+    rows = attendance_from_dwell(dwell["rows"])
+    for r in rows:
+        r["idle_seconds"] = aisle.get(r["emp_id"], 0.0)
     return {
         "as_of": dwell["as_of"],
         "from": dwell["from"],
         "to": dwell["to"],
-        "rows": attendance_from_dwell(dwell["rows"]),
+        "rows": rows,
     }
 
 

@@ -59,8 +59,9 @@ def test_attendance_csv():
     parsed = list(csv.reader(io.StringIO(attendance_csv(data))))
     assert parsed[0] == ["employee_id", "employee_name", "arrival", "departure",
                          "span_seconds", "span", "tracked_seconds", "tracked",
-                         "zones", "present"]
+                         "idle_seconds", "idle", "zones", "present"]
     assert parsed[1][0] == "E1"
     assert parsed[1][4] == "3000" and parsed[1][5] == "0:50:00"  # span 50m
     assert parsed[1][6] == "2400" and parsed[1][7] == "0:40:00"  # tracked 40m
-    assert parsed[1][8] == "2"
+    assert parsed[1][8] == "0"    # idle_seconds (no track data in this fixture)
+    assert parsed[1][10] == "2"   # zones

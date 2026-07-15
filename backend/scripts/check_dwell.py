@@ -256,6 +256,8 @@ async def main() -> None:
         _assert(amap["E1"]["present"] is True, "Ali present")
         _assert(amap["E2"]["tracked_seconds"] == 2400 and amap["E2"]["present"] is False,
                 "Sara tracked=2400s, not present")
+        _assert(amap["E1"]["idle_seconds"] == 0 and amap["E2"]["idle_seconds"] == 0,
+                "idle=0 for whole-track (always attributed to a zone)")
 
         # ---- Zone rollup (total person-time, distinct people, avg, present).
         roll = await get_zone_rollup(
@@ -431,6 +433,67 @@ async def main() -> None:
         for tbl in (PersonIdentity, TrackPoint, Track, FloorPlan, Camera, Site):
             await db.execute(delete(tbl).where(tbl.tenant_id == t3.id))
         await db.execute(delete(Tenant).where(Tenant.id == t3.id))
+        await db.commit()
+
+        # ---- Idle/aisle time: two desks with a GAP (aisle) between them; a track
+        # that passes A -> aisle -> B should log 5m idle (tracked but in no zone).
+        t4 = Tenant(name="Aisle Test Co", subdomain=f"aisle-{uuid4().hex[:8]}")
+        db.add(t4)
+        await db.flush()
+        s4 = Site(tenant_id=t4.id, name="Office")
+        db.add(s4)
+        await db.flush()
+        acam = Camera(tenant_id=t4.id, site_id=s4.id, name="Aisle Cam",
+                      rtsp_url="rtsp://x/aisle", mediamtx_path=f"a-{uuid4().hex[:6]}",
+                      calibration={"homography": H_SCALE})
+        db.add(acam)
+        await db.flush()
+        gap_zones = [
+            {"id": str(uuid4()), "name": "Desk A", "rules": [],
+             "polygon": [{"x": 0.0, "y": 0.0}, {"x": 0.4, "y": 0.0},
+                         {"x": 0.4, "y": 1.0}, {"x": 0.0, "y": 1.0}]},
+            {"id": str(uuid4()), "name": "Desk B", "rules": [],
+             "polygon": [{"x": 0.6, "y": 0.0}, {"x": 1.0, "y": 0.0},
+                         {"x": 1.0, "y": 1.0}, {"x": 0.6, "y": 1.0}]},
+        ]
+        fp4 = FloorPlan(
+            tenant_id=t4.id, site_id=s4.id, name="Aisle Floor",
+            original_filename="a.png", original_content_type="image/png",
+            original_size_bytes=1, format="png", width_px=1000, height_px=1000,
+            storage_key_original="k",
+            markers=[{"camera_id": str(acam.id), "x": 0.2, "y": 0.5}], zones=gap_zones)
+        db.add(fp4)
+        await db.flush()
+        atr = Track(tenant_id=t4.id, camera_id=acam.id, tracker_id=1,
+                    started_at=now - timedelta(minutes=30), ended_at=now,
+                    first_bbox={"x1": 100, "y1": 700, "x2": 300, "y2": 900},
+                    last_bbox={"x1": 700, "y1": 700, "x2": 900, "y2": 900}, point_count=4)
+        db.add(atr)
+        await db.flush()
+        # world_x: A (0.2) for 20m, aisle (0.5) 10m..5m ago, B (0.8) last 5m.
+        for mins_ago, wx in [(30, 0.2), (20, 0.2), (10, 0.5), (5, 0.8)]:
+            db.add(TrackPoint(
+                ts=now - timedelta(minutes=mins_ago), track_id=atr.id,
+                tenant_id=t4.id, camera_id=acam.id, tracker_id=1,
+                bbox_x1=0, bbox_y1=0, bbox_x2=10, bbox_y2=10, confidence=0.9,
+                world_x=wx, world_y=0.5))
+        db.add(PersonIdentity(tenant_id=t4.id, track_id=atr.id, camera_id=acam.id,
+                              emp_id="E6", name="Ida", votes=5, confidence=0.9, source="face"))
+        await db.commit()
+
+        aatt = await get_attendance(
+            db, tenant_id=t4.id,
+            started_after=now - timedelta(hours=1), started_before=now + timedelta(hours=1))
+        ida = aatt["rows"][0]
+        print(f"\nIdle/aisle: Ida tracked={int(ida['tracked_seconds'])//60}m "
+              f"idle={int(ida['idle_seconds'])//60}m zones={ida['zones_count']}")
+        _assert(ida["idle_seconds"] == 5 * 60, "Ida idle = 5m (through the aisle, in no zone)")
+        _assert(ida["tracked_seconds"] == 25 * 60, "Ida tracked = 25m (Desk A 20m + Desk B 5m)")
+        _assert(ida["zones_count"] == 2, "Ida visited 2 zones")
+
+        for tbl in (PersonIdentity, TrackPoint, Track, FloorPlan, Camera, Site):
+            await db.execute(delete(tbl).where(tbl.tenant_id == t4.id))
+        await db.execute(delete(Tenant).where(Tenant.id == t4.id))
         await db.commit()
 
         # Cleanup so a shared DB stays tidy (throwaway DBs don't need this).

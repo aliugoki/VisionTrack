@@ -170,6 +170,7 @@ class AttendanceRow(BaseModel):
     departure: datetime
     span_seconds: float
     tracked_seconds: float
+    idle_seconds: float = 0.0   # tracked but in no zone (aisle / between desks)
     zones_count: int
     present: bool
 

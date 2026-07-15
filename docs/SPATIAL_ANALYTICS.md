@@ -110,7 +110,7 @@ them for "today". Every reporting endpoint accepts the same **filters**:
 | `GET /zones/occupancy` | Live per-zone known/unknown headcount (5s refresh). |
 | `GET /zones/dwell` · `dwell.csv` | Per (employee, zone) time, visits, first/last seen, present. |
 | `GET /zones/rollup` · `rollup.csv` | Per zone: total time, distinct people, avg, present. |
-| `GET /attendance` · `attendance.csv` | Per employee: arrival, departure, on-site span, tracked time, zones. |
+| `GET /attendance` · `attendance.csv` | Per employee: arrival, departure, on-site span, tracked time, **idle/aisle time** (tracked but in no zone), zones. |
 | `GET /zones/heatmap` · `heatmap.csv` | Hour-of-day occupancy per zone (person-time + distinct people in each of the 24 tenant-local hours). |
 | `GET /persons/{emp_id}/timeline` · `timeline.csv` | One employee's chronological zone visits. |
 

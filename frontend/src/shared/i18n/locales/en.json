@@ -729,6 +729,7 @@
       "departure": "Departure",
       "onSite": "On-site",
       "tracked": "Tracked",
+      "idle": "Idle",
       "zones": "Zones",
       "departed": "Departed",
       "zoneHeading": "By zone",

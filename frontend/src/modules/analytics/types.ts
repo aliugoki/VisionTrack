@@ -124,6 +124,7 @@ export interface AttendanceRow {
   departure: string; // ISO datetime
   span_seconds: number; // wall-clock arrival -> departure
   tracked_seconds: number; // total time inside zones
+  idle_seconds: number; // tracked but in no zone (aisle / between desks)
   zones_count: number;
   present: boolean;
 }

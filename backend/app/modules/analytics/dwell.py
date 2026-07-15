@@ -223,6 +223,26 @@ def _interval(ref: dict[str, Any], start: datetime, end: datetime) -> dict[str, 
     }
 
 
+def union_seconds(intervals: Iterable[tuple[datetime, datetime]]) -> float:
+    """Total seconds covered by a set of ``(start, end)`` intervals, overlaps
+    counted once. Used for aisle/idle time — a track's in-zone coverage (union of
+    its zone intervals) vs its span reveals time tracked but in no zone."""
+    ivs = sorted(((s, e) for s, e in intervals if e > s), key=lambda x: x[0])
+    if not ivs:
+        return 0.0
+    total = 0.0
+    cur_s, cur_e = ivs[0]
+    for s, e in ivs[1:]:
+        if s <= cur_e:
+            if e > cur_e:
+                cur_e = e
+        else:
+            total += (cur_e - cur_s).total_seconds()
+            cur_s, cur_e = s, e
+    total += (cur_e - cur_s).total_seconds()
+    return total
+
+
 def zone_durations_from_intervals(
     intervals: Iterable[dict[str, Any]],
 ) -> list[dict[str, Any]]:
